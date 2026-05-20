@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WMS Higienita — Mapeamento de Armazém</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--navy:#0B1F3A;--navy-mid:#122D50;--navy-card:#162E4E;--green:#00C07F;--green-dk:#009960;--amber:#F59E0B;--red:#EF4444;--blue:#3B82F6;--gray:#8FA3B8;--gray-lt:#D6E4F0;--border:rgba(255,255,255,0.08);--r:10px;--rs:6px}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Sora',sans-serif;background:var(--navy);color:#fff;min-height:100vh}
+::-webkit-scrollbar{width:5px;height:5px}::-webkit-scrollbar-track{background:var(--navy-mid)}::-webkit-scrollbar-thumb{background:var(--green-dk);border-radius:3px}
+.header{background:var(--navy-card);border-bottom:1px solid var(--border);padding:0 20px;display:flex;align-items:center;gap:12px;height:52px;position:sticky;top:0;z-index:100}
+.logo{font-size:14px;font-weight:700;color:var(--green);letter-spacing:.05em}.logo span{color:#fff;font-weight:400}
+.hstatus{font-size:11px;color:var(--gray);display:flex;align-items:center;gap:5px;margin-left:auto}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--green);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.sbtn{padding:5px 12px;background:var(--green);color:var(--navy);border:none;border-radius:var(--rs);font-family:'Sora',sans-serif;font-size:12px;font-weight:600;cursor:pointer}
+.sbtn:hover{background:var(--green-dk)}
+.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:16px 20px 0}
+.mc{background:var(--navy-card);border:1px solid var(--border);border-radius:var(--r);padding:14px}
+.ml{font-size:11px;color:var(--gray);margin-bottom:4px;text-transform:uppercase;letter-spacing:.04em}
+.mv{font-size:24px;font-weight:700;font-family:'DM Mono',monospace}
+.mbar{height:3px;background:rgba(255,255,255,.1);border-radius:2px;margin-top:6px;overflow:hidden}
+.mbf{height:3px;border-radius:2px;transition:width .5s}
+.tabs{display:flex;gap:2px;padding:14px 20px 0;border-bottom:1px solid var(--border);overflow-x:auto}
+.tab{padding:9px 16px;font-size:12px;font-weight:500;cursor:pointer;border:none;background:none;color:var(--gray);border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap;transition:color .15s;font-family:'Sora',sans-serif}
+.tab:hover{color:#fff}.tab.active{color:var(--green);border-bottom-color:var(--green)}
+.content{padding:16px 20px}
+/* MAPA */
+.cb{margin-bottom:20px}
+.ch{display:flex;align-items:center;gap:8px;padding:9px 12px;background:var(--navy-card);border:1px solid var(--border);border-radius:var(--r);margin-bottom:8px}
+.ctag{font-size:18px;font-weight:700;color:var(--green);font-family:'DM Mono',monospace;width:28px}
+.cinfo{font-size:11px;color:var(--gray);flex:1}.cpct{font-size:12px;color:#fff;font-family:'DM Mono',monospace}
+.pscroll{overflow-x:auto;padding-bottom:6px}
+.prow{display:inline-flex;gap:6px;padding:2px}
+.col{display:flex;flex-direction:column;gap:3px;align-items:center}
+.collabel{font-size:9px;color:rgba(255,255,255,.3);font-family:'DM Mono',monospace;margin-bottom:2px;text-align:center}
+.pal{width:54px;height:60px;border-radius:var(--rs);border:1px solid rgba(255,255,255,.1);background:var(--navy-mid);cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;transition:border-color .15s,background .15s;text-align:center;padding:3px;position:relative}
+.pal:hover{border-color:var(--green);background:rgba(0,192,127,.08)}
+.pal.multi{background:rgba(0,153,96,.18);border-color:rgba(0,192,127,.5)}
+.pal.single{background:rgba(0,192,127,.1);border-color:rgba(0,192,127,.35)}
+.pal.sel{background:rgba(59,130,246,.2);border-color:var(--blue)}
+.paddr{font-size:10px;font-weight:600;font-family:'DM Mono',monospace;color:#fff}
+.pniv{font-size:8px;opacity:.5}
+.pcount{font-size:8px;color:var(--green);font-weight:600}
+.psku{font-size:7px;color:var(--green);max-width:50px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+/* LEGENDA */
+.legend{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:12px}
+.li{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--gray)}
+.ld{width:12px;height:12px;border-radius:3px}
+/* LISTA */
+.lcontrols{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+.lcontrols input,.lcontrols select{background:var(--navy-card);border:1px solid var(--border);border-radius:var(--rs);color:#fff;padding:7px 11px;font-size:12px;font-family:'Sora',sans-serif;outline:none}
+.lcontrols input{flex:1;min-width:160px}.lcontrols input::placeholder{color:var(--gray)}
+.lcontrols select option{background:var(--navy-mid)}
+.lcontrols input:focus,.lcontrols select:focus{border-color:var(--green)}
+.lscroll{max-height:500px;overflow-y:auto}
+.lhead{display:grid;grid-template-columns:70px 52px 55px 1fr 75px 60px 70px;gap:6px;padding:4px 10px;font-size:11px;color:var(--gray);font-weight:500;text-transform:uppercase;letter-spacing:.03em;margin-bottom:3px}
+.lrow{display:grid;grid-template-columns:70px 52px 55px 1fr 75px 60px 70px;gap:6px;align-items:center;padding:8px 10px;background:var(--navy-card);border:1px solid var(--border);border-radius:var(--rs);margin-bottom:3px;font-size:12px;cursor:pointer;transition:border-color .15s}
+.lrow:hover{border-color:rgba(0,192,127,.35)}
+.npill{font-size:10px;padding:1px 6px;border-radius:20px;display:inline-block;white-space:nowrap;font-family:'DM Mono',monospace}
+.ebtn{padding:4px 10px;background:rgba(0,192,127,.1);border:1px solid rgba(0,192,127,.3);border-radius:var(--rs);color:var(--green);font-size:11px;font-family:'Sora',sans-serif;cursor:pointer;white-space:nowrap}
+.ebtn:hover{background:rgba(0,192,127,.2)}
+/* BUSCA */
+.sinput{width:100%;background:var(--navy-card);border:1px solid var(--border);border-radius:var(--rs);color:#fff;padding:11px 15px;font-size:14px;font-family:'Sora',sans-serif;outline:none;margin-bottom:14px}
+.sinput:focus{border-color:var(--green)}.sinput::placeholder{color:var(--gray)}
+/* IMPORTAR */
+.icard{background:var(--navy-card);border:1px solid var(--border);border-radius:var(--r);padding:18px;margin-bottom:10px}
+.ititle{font-size:14px;font-weight:600;margin-bottom:6px}
+.idesc{font-size:12px;color:var(--gray);margin-bottom:12px;line-height:1.6}
+.idesc code{background:rgba(255,255,255,.08);padding:1px 5px;border-radius:3px;font-family:'DM Mono',monospace;font-size:11px}
+.icard textarea{width:100%;background:var(--navy-mid);border:1px solid var(--border);border-radius:var(--rs);color:#fff;padding:10px;font-size:12px;font-family:'DM Mono',monospace;resize:vertical;min-height:140px;outline:none}
+.icard textarea:focus{border-color:var(--green)}
+.btnrow{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.btn{padding:7px 14px;border-radius:var(--rs);font-size:12px;font-weight:500;font-family:'Sora',sans-serif;cursor:pointer;border:none;transition:background .15s}
+.btn-p{background:var(--green);color:var(--navy)}.btn-p:hover{background:var(--green-dk)}
+.btn-s{background:rgba(255,255,255,.06);color:#fff;border:1px solid var(--border)}.btn-s:hover{background:rgba(255,255,255,.1)}
+.btn-d{background:rgba(239,68,68,.1);color:var(--red);border:1px solid rgba(239,68,68,.3)}.btn-d:hover{background:rgba(239,68,68,.2)}
+.imsg{font-size:12px;margin-top:8px;min-height:16px}
+/* MODAL */
+.mbg{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:500;backdrop-filter:blur(4px)}
+.modal{background:var(--navy-card);border:1px solid rgba(0,192,127,.2);border-radius:var(--r);padding:22px;width:460px;max-width:95vw;max-height:90vh;overflow-y:auto}
+.mhdr{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:4px}
+.maddr{font-size:22px;font-weight:700;font-family:'DM Mono',monospace;color:var(--green)}
+.mclose{background:none;border:none;color:var(--gray);font-size:18px;cursor:pointer;line-height:1}
+.msub{font-size:12px;color:var(--gray);margin-bottom:14px}
+/* Produtos no palete */
+.prod-item{background:var(--navy-mid);border:1px solid var(--border);border-radius:var(--rs);padding:10px 12px;margin-bottom:6px;position:relative}
+.prod-item .pi-sku{font-size:11px;font-family:'DM Mono',monospace;color:var(--green);margin-bottom:2px}
+.prod-item .pi-desc{font-size:13px;color:#fff;margin-bottom:4px;font-weight:500}
+.prod-item .pi-qty{font-size:12px;color:var(--gray)}
+.prod-item .pi-del{position:absolute;top:8px;right:8px;background:none;border:none;color:var(--red);cursor:pointer;font-size:13px;opacity:.7}
+.prod-item .pi-del:hover{opacity:1}
+.add-prod-form{background:rgba(0,192,127,.06);border:1px solid rgba(0,192,127,.2);border-radius:var(--rs);padding:12px;margin-top:10px}
+.add-prod-title{font-size:12px;color:var(--green);font-weight:500;margin-bottom:8px}
+.fgrid{display:grid;grid-template-columns:1fr 1fr 80px;gap:8px;margin-bottom:8px}
+.flabel{font-size:11px;color:var(--gray);margin-bottom:3px;text-transform:uppercase;letter-spacing:.03em}
+.finput{width:100%;background:var(--navy-mid);border:1px solid var(--border);border-radius:var(--rs);color:#fff;padding:8px 10px;font-size:13px;font-family:'Sora',sans-serif;outline:none}
+.finput:focus{border-color:var(--green)}.finput::placeholder{color:rgba(143,163,184,.5)}
+.mactions{display:flex;gap:8px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap}
+/* RELATORIO */
+.rcard{background:var(--navy-card);border:1px solid var(--border);border-radius:var(--r);padding:18px;margin-bottom:10px}
+.rtitle{font-size:14px;font-weight:600;margin-bottom:10px}
+.rrow{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.rlabel{font-size:13px;font-weight:600;font-family:'DM Mono',monospace;color:var(--green);width:20px}
+.rbg{flex:1;height:8px;background:rgba(255,255,255,.06);border-radius:4px;overflow:hidden}
+.rbf{height:8px;border-radius:4px;background:var(--green);transition:width .5s}
+.rval{font-size:11px;color:var(--gray);font-family:'DM Mono',monospace;width:120px;text-align:right}
+/* TOAST */
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);padding:9px 18px;border-radius:var(--r);font-size:13px;font-weight:500;z-index:999;opacity:0;transition:opacity .2s;pointer-events:none}
+.empty{text-align:center;padding:36px;color:var(--gray);font-size:13px}
+@media(max-width:600px){.metrics{grid-template-columns:repeat(2,1fr)}.lhead,.lrow{grid-template-columns:60px 50px 1fr 60px}.lhead span:nth-child(3),.lrow span:nth-child(3),.lhead span:nth-child(5),.lrow span:nth-child(5){display:none}}
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="logo">HIGIENITA <span>/ WMS</span></div>
+  <div class="hstatus"><div class="dot"></div><span id="stxt">Carregando…</span></div>
+  <button class="sbtn" onclick="salvar()">💾 Salvar</button>
+</div>
+
+<div class="metrics">
+  <div class="mc"><div class="ml">Total paletes</div><div class="mv">204</div></div>
+  <div class="mc"><div class="ml">Ocupados</div><div class="mv" id="mocup" style="color:var(--green)">0</div></div>
+  <div class="mc"><div class="ml">Produtos únicos</div><div class="mv" id="mprod">0</div></div>
+  <div class="mc"><div class="ml">Ocupação</div><div class="mv" id="mpct">0%</div><div class="mbar"><div class="mbf" id="mbar" style="width:0%;background:var(--green)"></div></div></div>
+</div>
+
+<div class="tabs">
+  <button class="tab active" onclick="showTab('mapa')">🗺 Mapa</button>
+  <button class="tab" onclick="showTab('lista')">📋 Lista</button>
+  <button class="tab" onclick="showTab('buscar')">🔍 Buscar</button>
+  <button class="tab" onclick="showTab('importar')">📥 Importar CSV</button>
+  <button class="tab" onclick="showTab('relatorio')">📊 Relatório</button>
+</div>
+
+<div class="content">
+  <div id="tab-mapa">
+    <div class="legend">
+      <div class="li"><div class="ld" style="background:rgba(0,153,96,.25);border:1px solid rgba(0,192,127,.5)"></div>Múltiplos produtos</div>
+      <div class="li"><div class="ld" style="background:rgba(0,192,127,.1);border:1px solid rgba(0,192,127,.35)"></div>1 produto</div>
+      <div class="li"><div class="ld" style="background:var(--navy-mid);border:1px solid rgba(255,255,255,.1)"></div>Livre</div>
+      <span style="font-size:11px;color:rgba(143,163,184,.6)">← Clique para editar</span>
+    </div>
+    <div id="mapa"></div>
+  </div>
+
+  <div id="tab-lista" style="display:none">
+    <div class="lcontrols">
+      <input id="ftxt" placeholder="Endereço, produto ou SKU…" oninput="renderLista()">
+      <select id="fcor" onchange="renderLista()">
+        <option value="">Todos corredores</option>
+        <option>A</option><option>B</option><option>C</option><option>D</option><option>E</option>
+      </select>
+      <select id="fst" onchange="renderLista()">
+        <option value="">Todos</option>
+        <option value="ocup">Ocupados</option>
+        <option value="livre">Livres</option>
+      </select>
+      <button class="btn btn-s" onclick="exportCSV()">⬇ CSV</button>
+    </div>
+    <div class="lhead"><span>Endereço</span><span>Nível</span><span>Corredor</span><span>Produtos</span><span>SKUs</span><span>Qtd total</span><span></span></div>
+    <div class="lscroll" id="lbody"></div>
+  </div>
+
+  <div id="tab-buscar" style="display:none">
+    <input class="sinput" id="sinput" placeholder="Digite produto ou SKU para localizar no armazém…" oninput="buscar()">
+    <div id="sres"></div>
+  </div>
+
+  <div id="tab-importar" style="display:none">
+    <div class="icard">
+      <div class="ititle">Importar via CSV</div>
+      <div class="idesc">Cole o CSV com as colunas: <code>endereco,sku,produto,quantidade</code><br>Um produto por linha. O mesmo endereço pode aparecer múltiplas vezes para paletes com vários produtos.<br>Exemplo:<br><code>A01,DET-001,Detergente 500ml,48</code><br><code>A01,ALC-002,Álcool Gel 70%,24</code></div>
+      <textarea id="csvtxt" placeholder="A01,DET-001,Detergente 500ml,48&#10;A01,ALC-002,Álcool Gel 70%,24"></textarea>
+      <div class="btnrow">
+        <button class="btn btn-p" onclick="importCSV()">⬆ Importar</button>
+        <button class="btn btn-s" onclick="document.getElementById('csvtxt').value=gerarTemplate()">📄 Gerar template</button>
+        <button class="btn btn-s" onclick="exportCSV()">⬇ Exportar atual</button>
+      </div>
+      <div class="imsg" id="imsg"></div>
+    </div>
+  </div>
+
+  <div id="tab-relatorio" style="display:none">
+    <div class="rcard">
+      <div class="rtitle">Ocupação por corredor</div>
+      <div id="rresume"></div>
+    </div>
+    <div class="rcard">
+      <div class="rtitle">Ações</div>
+      <div class="btnrow">
+        <button class="btn btn-s" onclick="exportCSV()">⬇ Exportar CSV completo</button>
+        <button class="btn btn-d" onclick="limpar()">🗑 Limpar todos os dados</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL -->
+<div id="mwrap" style="display:none">
+  <div class="mbg" onclick="closeModal()">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="mhdr">
+        <div><div class="maddr" id="maddr"></div><div class="msub" id="msub"></div></div>
+        <button class="mclose" onclick="closeModal()">✕</button>
+      </div>
+      <div id="mbody"></div>
+      <div class="add-prod-form">
+        <div class="add-prod-title">+ Adicionar produto neste palete</div>
+        <div class="fgrid">
+          <div><div class="flabel">Produto</div><input class="finput" id="nprod" placeholder="Ex: Detergente 500ml"></div>
+          <div><div class="flabel">SKU</div><input class="finput" id="nsku" placeholder="Ex: DET-001"></div>
+          <div><div class="flabel">Qtd</div><input class="finput" id="nqtd" type="number" min="0" value="0"></div>
+        </div>
+        <button class="btn btn-p" onclick="addProd()">Adicionar produto</button>
+        <div style="font-size:12px;color:var(--red);margin-top:6px;min-height:16px" id="nerr"></div>
+      </div>
+      <div class="mactions">
+        <button class="btn btn-s" onclick="closeModal()">Fechar</button>
+        <button class="btn btn-p" onclick="salvarModal()">✓ Salvar palete</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const LAYOUT={A:20,B:12,C:12,D:12,E:12};
+const NL=['Chão','Meio','Topo'];
+const NC=['#F59E0B','#3B82F6','#10B981'];
+const NB=['rgba(245,158,11,.15)','rgba(59,130,246,.15)','rgba(16,185,129,.15)'];
+const KEY='higienita-wms-v2';
+// P[addr] = {addr,cor,col,niv,produtos:[{sku,desc,qty}]}
+let P={}, sel=null, modalProds=[];
+
+function addr(cor,col,niv){return cor+String((col-1)*3+niv).padStart(2,'0');}
+
+function initP(){
+  Object.entries(LAYOUT).forEach(([cor,cols])=>{
+    for(let c=1;c<=cols;c++) for(let n=1;n<=3;n++){
+      const a=addr(cor,c,n);
+      if(!P[a]) P[a]={addr:a,cor,col:c,niv:n,produtos:[]};
+    }
+  });
+}
+
+function npill(niv){return`<span class="npill" style="background:${NB[niv-1]};color:${NC[niv-1]}">${NL[niv-1]}</span>`;}
+
+// ── TINY ERP DATA ──
+const TINY={'A01':[{s:'VGALCSW5',d:'VIGUT ALCOOL PERFUMADO SWEET 5L',q:9},{s:'VGDSBIO',d:'VIGUT DESINFETANTE BIOGRAPY 5L',q:15},{s:'DETVIG',d:'VIGUT DETERGENTE NEUTRO 5L',q:7},{s:'VGMT5L',d:'VIGUT MULTIUSO 5L',q:14},{s:'VGSBDOV5',d:'VIGUT SABONETE LIQUIDO DOVEX 5L',q:6},{s:'LAVLOC1',d:'ALVEJAPRO LAVA LOUCAS 1 KG',q:109},{s:'ACISO120',d:'QUIMIVIDA ALCOOL ISOPROPILICO 120ML',q:41}],'A02':[{s:'VGDSDOG5',d:'VIGUT DESINFETANTE DOG FRESH 5L',q:3},{s:'VGLV5',d:'VIGUT DESINFETANTE LAVANDA 5L',q:24},{s:'DSTALC5',d:'VIGUT DESINFETANTE TALCO  5L',q:2},{s:'VGDSFL',d:'VIGUT FLORAL DESINFETANTE 5L',q:6},{s:'VGLPMAX5',d:'VIGUT LAVA ROUPAS DIMAX 5L',q:13},{s:'VGDSLV5',d:'VIGUT LAVANDA DESINFETANTE 5L',q:0},{s:'VGLPAL5',d:'VIGUT LIMPA ALUMINIO 5L',q:3},{s:'LAVLOCAS',d:'ALVEJAPRO LAVA LOUCAS 450 G',q:209},{s:'QVLPMQLV1L',d:'QUIMIVIDA LIMPADOR DE MAQUINA DE LAVAR 1L',q:499},{s:'ACISO1L',d:'QUIMVIDA ALCOOL ISOPROPILICO 1L',q:58}],'A03':[{s:'VGSBCC5',d:'VIGUT SABAO LIQUIDO COCO  5L',q:3}],'A04':[{s:'BLACKPERC',d:'QUIMIVIDA BLACK PERCARBONATO 1 KG',q:828}],'A05':[{s:'ALVSCLR1KG',d:'AEVO ALVEJANTE SEM CLORO 1 KG',q:43},{s:'NAFT1KG',d:'NAFTALINA 1 KG',q:258},{s:'ANTIMOF1KG',d:'QUIMIVIDA ANTI-MOFO 1KG',q:25}],'A06':[{s:'INT100',d:'THORIUM INTERFOLHA 100% CELULOSE 20X21',q:450}],'A07':[{s:'PED5L',d:'START PEDREX 5L',q:1},{s:'PERCS1KG',d:'QUIMIVIDA PERCARBONATO DE SODIO 1KG',q:860}],'A09':[{s:'PIACITRUS',d:'EMBALIXO SACO LIXO PIA E BANHEIRO CITRUS 34x38',q:0}],'A10':[{s:'DIAADIA1KG',d:'ALVEJAPRO DIA-A-DIA 1 KG',q:52},{s:'IMP120',d:'ALVEJAPRO IMPERMEABILIZANTE 120 ML',q:89}],'A11':[{s:'SCTCH',d:'SCOTCH BRITE ESPONJA 3M',q:0}],'A13':[{s:'CERAUTBRI',d:'START CERA AUTO BRILHO 5L',q:326}],'A14':[{s:'HIGANTIMOF',d:'HIGIENITA ANTI-MOFO 1KG',q:37},{s:'HIGPERCA',d:'HIGIENITA PERCARBONATO 1KG',q:443}],'A15':[{s:'THINTVG',d:'THORIUM INTERFOLHA VIRGEM 22,5X21',q:198}],'A16':[{s:'LIMPAZL1L',d:'START AZULIM LIMPA CERAMICAS E AZULEJOS LAVANDA 1L',q:734}],'A17':[{s:'ALCLAV1L',d:'TAUIPE LAVANDA ALCOOL PERFUMADO 1L',q:104},{s:'LPCERAZ2L',d:'START AZULIM LIMPA CERAMICAS E AZULEJOS LAVANDA 2L',q:357}],'A18':[{s:'INTBR20X21',d:'THORIUM INTERFOLHA BRANCO 20X21',q:11},{s:'NVPC4',d:'NEVE PACOTE 4 ROLOS FOLHA DUPLA',q:37},{s:'SNOB2UN',d:'SNOB PAPEL TOALHA 2UN ( PCT )',q:16}],'A21':[{s:'HIGMANBOR',d:'HIGIENITA GERADOR DE ESPUMA MANUAL BORRIFADOR 2L MATERIAL PP',q:0}],'A22':[{s:'LIMPAZL5L',d:'START AZULIM LIMPA CERAMICAS E AZULEJOS LAVANDA 5L',q:149}],'A24':[{s:'DESIWAV1L',d:'START AZULIM WAVE DESINFETANTE 1L',q:49},{s:'DESINEO1L',d:'START AZULIM  NEON DESINFETANTE 1L',q:44},{s:'ABSDESIN',d:'START AZULIM ABSOLUTE DESINFETANTE 1L',q:39},{s:'ALECDESIN',d:'START AZULIM ALECRIM DESINFETANTE 1L',q:61},{s:'DESIERV1L',d:'START AZULIM ERVA DOCE DESINFETANTE 1L',q:45},{s:'DESIMAR1L',d:'START AZULIM MARINER DESINFETANTE 1L',q:4}],'A25':[{s:'MAGICO5L',d:'START MAGICO 5L',q:-44}],'A27':[{s:'RLCLAS',d:'CLASSIC PAPEL HIGENICO ROLAO FS 100% 8 UN',q:-4},{s:'CPRL100',d:'CLASSPEL PAPEL HIGIENICO ROLAO FOLHA SIMPLES 100% 8X300',q:0}],'A28':[{s:'CP30005L',d:'START CP3000 5L',q:91},{s:'SH30005L',d:'START SH3000 5L',q:0}],'A30':[{s:'HIGBALRET',d:'HIGIENITA BALDE RETRATIL 10L',q:0}],'A31':[{s:'ASSABANT',d:'START ASSEPTGEL SABONETE ANTISSÉPTICO 5L SEM AROMA',q:4},{s:'FLOGEL5',d:'START AZULIM GEL LIMPADOR FLORATA 5L',q:5},{s:'MARIGEL5L',d:'START AZULIM GEL LIMPADOR MARINER 5L',q:-2}],'A32':[{s:'CX21X22FS',d:'NOBBY CAIXA GUARDANAPO 21X22 FOLHA SIMPLES 48 PCTS 50UN',q:35},{s:'CX30X31FS',d:'NOBBY CAIXA GUARDANAPO 30X31 FOLHA SIMPLES 60 PCTS 50UN',q:32}],'A34':[{s:'DLSTART5L',d:'START DL DESENGRAX 5L',q:8}],'A35':[{s:'DR695BR',d:'DONA RITA POTE MOLHO 695 BRANCO 700UN',q:23}],'A37':[{s:'POLYINC5L',d:'START POLYLAR CERA INCOLOR 5L',q:2}],'A38':[{s:'BORRI500ML',d:'BORRIFADOR 500ML',q:0}],'A41':[{s:'AZLPCHBR1L',d:'START AZULIM LIMPADOR CHA BRANCO 1L',q:505}],'A43':[{s:'AGE1L',d:'AGE INSETICIDA 1L',q:690}],'A45':[{s:'NBFS21X22',d:'NOBBY FOLHA SIMPLES GUARDANAPO 21X22 50UN',q:0}],'A48':[{s:'IPELFSINT',d:'INDAIAL PAPEL INTERFOLHADO 22,5X20,5 FOLHA SIMPLES 2000fls',q:422}],'A55':[{s:'STARTGR5L',d:'START GRILL 5L',q:31},{s:'AGEEXT',d:'AGE EXTERMIGEL 10G',q:79}],'A56':[{s:'TFAZL1L',d:'START AZULIM TIRA FERRUGEM 1L',q:17},{s:'STDSPV',d:'START DESENTUPIDOR PIAS E VASOS SANITARIOS 1L',q:2},{s:'STARTGR1L',d:'START GRILL 1L',q:26},{s:'DETNT5L',d:'YPE DETERGENTE NEUTRO 5L',q:1}],'A58':[{s:'PUSTRGRL5L',d:'START PRO LIMPA CHAPAS E GRELHAS 5L',q:57}],'A59':[{s:'DESINFLOR5L',d:'START AZULIM FLORATA DESINFENTANTE 5L',q:75}],'B02':[{s:'DESIEUC1L',d:'START AZULIM EUCALIPTO DESINFETANTE 1L',q:52},{s:'DESINFLOR1L',d:'START AZULIM FLORATA DESINFENTANTE 1L',q:51}],'B03':[{s:'ECO180',d:'COPO 180ML BR ECONOPOT C/100',q:98},{s:'CXCPM180BR',d:'COPOMAIS CAIXA COPO PS 180ML BRANCO 100UN',q:11}],'B06':[{s:'ACPALHA2',d:'VEGA PALHA AÇO N°2',q:256},{s:'CLARLBR',d:'CLASSIC PAPEL HIGIENICO ROLAO FS BRANCO 8UN',q:20}],'B09':[{s:'FIBRA9504',d:'BETTANIN FIBRA BRANCA 9504',q:760},{s:'VERDE9502',d:'BETTANIN FIBRA VERDE 9502',q:0}],'B16':[{s:'ASPTGEL5L',d:'START ASSEPTGEL ALCOOL GEL 70% 4,3KG (5L)',q:485}],'B19':[{s:'ASACLIQ5L',d:'START ASSEPTGEL ALCOOL LIQUIDO 70% 5L',q:1}],'B20':[{s:'CERAACR5L',d:'START CERA ACRILICA 5L',q:55}],'B21':[{s:'G032MB',d:'GALVANOTEK G 032 BRANCA TAMPA BAIXA 100UN',q:0},{s:'G059CT',d:'GALVANOTEK G 059 TAMPA ALTA CT',q:0},{s:'GPT677',d:'GALVANOTEK G 677 POTE 250ML - 400UN',q:0}],'B23':[{s:'CERAACR2L',d:'START CERA ACRILICA 2L',q:131}],'B27':[{s:'MAXI5L',d:'START MAXIMOOM 5L',q:111}],'B28':[{s:'USH5L',d:'START CERA UHS 5L',q:8},{s:'LIMPALUM',d:'START LIMPA ALUMINIO 500ML',q:25},{s:'LIMPREJ2L',d:'START LIMPA REJUNTE 2L',q:0},{s:'MAXI2L',d:'START MAXIMOOM 2L',q:1},{s:'AZCLG1L',d:'START AZULIM CLORO EM GEL 1L',q:12}],'B29':[{s:'BTBR80X40',d:'BOBINA TERMICA BRANCA 80X40',q:110}],'B31':[{s:'PRET2L',d:'START PRETITA 2L',q:133},{s:'PRET5L',d:'START PRETITA 5L',q:-5},{s:'SELMAST5L',d:'START SELADOR MASTER 5L',q:5},{s:'ARGDET5L',d:'START ARGUS DETERGENTE CONCENTRADO 5L',q:3}],'B32':[{s:'MAXIBAC2L',d:'START MAXIMOOM BACTERICIDA 2L',q:13},{s:'ALCGEL52G-12',d:'KIT 12UN ASSEPTGEL ALCOOL GEL 52G',q:10},{s:'STKTCZ',d:'START AZULIM KIT COZINHA 3 UN 500ML',q:26}],'B33':[{s:'PT750ML',d:'CRISTALCOPO POTE 750ML 25UN',q:93},{s:'POTE250ML',d:'CRISTALCOPO POTE REDONDO 250ML 25UN',q:76},{s:'POTE500ML',d:'CRISTALCOPO POTE REDONDO 500ML  25UN',q:0}],'B34':[{s:'PRETO60L',d:'SACO DE LIXO 60L PRETO 100UN',q:40}],'B36':[{s:'LXRF200L',d:'SACO LIXO REFORÇADO 200L PRETO 100UN',q:7}],'C01':[{s:'MADBRIL1L',d:'W&W CERA BRILHANTE PARA MADEIRA 1L',q:455}],'C02':[{s:'ALT330',d:'ALTACOPPO COPO PP 330ML 50UN',q:477},{s:'TBSF330',d:'CRISTAL COPO TAMPA BOLHA 50UN SEM FURO PARA COPO 330ML',q:30},{s:'CP330PP',d:'CRISTALCOPO COPO PP 330ML  50UN',q:60},{s:'G880CF',d:'GALVANOTEK G 880 TAMPA COPO 330ML COM FURO 1000UN',q:25}],'C03':[{s:'APLCERA',d:'ESPALHA CERA ( PASSA/APLICADOR DE CERA )',q:117},{s:'ESPLPAZ',d:'ESPUMA LIMPA AZULEJO',q:302}],'C04':[{s:'LPMAD1L',d:'W&W LIMPADOR CONCENTRADO MADEIRA 1L',q:312}],'C05':[{s:'GTP330',d:'GALVANOTEK 50UN TAMPA BOLHA COM FURO PARA COPO 330ML',q:317}],'C06':[{s:'DCFBBR35',d:'BETTANIN DISCO FIBRA BRANCA 35CM',q:20},{s:'FIBRA9500',d:'BETTANIN FIBRAÇO PRETO 9500',q:940},{s:'ALT440',d:'COPO 440ML PP TR ALTACOPPO C/50',q:17}],'C07':[{s:'ACETMAD1L',d:'W&W CERA ACETINADA MADEIRA 1L',q:107},{s:'FOSCMAD1L',d:'W&W CERA FOSCA MADEIRA 1L',q:28},{s:'REMMAD1L',d:'W&W REMOVEDOR DE CERA CONCENTRADO 1L',q:323}],'C09':[{s:'DCFBVD35',d:'BETTANIN DISCO FIBRA VERDE 35CM',q:40},{s:'EFLIMPMQ',d:'ESFREBOM LIMPA MAQUINA 80G',q:247}],'C10':[{s:'LAMVINBRIL',d:'W&W CERA BRILHANTE LAMINADOS E VINILICOS 1L',q:271}],'C11':[{s:'SOLESPMT',d:'BETTANIN SOLUTION ESPONJA MULTIUSO',q:535}],'C13':[{s:'IMPAWW',d:'W&W IMPERMEABILIZANTE MADEIRA PLASTICA ACETINADO 1L',q:78},{s:'LPLAMVIN1L',d:'W&W LIMPADOR LAMINADOS E VINILICOS 1L',q:449},{s:'SHLPMDP',d:'W&W SHAMPOO LIMPADOR MADEIRA PLASTICA 1 L',q:-1}],'C16':[{s:'BELLISTONE',d:'W&W BELLI STONE CERA PASTA 400G',q:47},{s:'BELLIWOOD',d:'W&W BELLI WOOD CERA EM PASTA 400G',q:51},{s:'FRIOACET1L',d:'W&W CERA ACETINADA PISO FRIO 1L',q:68},{s:'ACETLV1L',d:'W&W CERA ACETINADA PISO LAMINADO E VINILICO 1L',q:48},{s:'LPPEDRA1L',d:'W&W LIMPA PEDRA 1L',q:84},{s:'POSOBRA1L',d:'W&W LIMPADOR PÓS OBRA 1L',q:72}],'C19':[{s:'CERFRBRIL1L',d:'W&W CERA BRILHANTE PISO FRIO 1L',q:66},{s:'LIMPFACIL1L',d:'W&W LIMPA FACIL CONCENTRADO 1L',q:78},{s:'LIMPREJ1L',d:'W&W LIMPA REJUNTE CONCENTRADO 1L',q:14},{s:'WWLIMPPC',d:'W&W LIMPADOR PORCELANATO 1L',q:38},{s:'SPRAYREJ',d:'W&W SPRAY LIMPA REJUNTE PRONTO USO 500ML',q:8}],'C20':[{s:'FRPET2L',d:'START FREE PET 2L',q:31},{s:'PED2L',d:'START PEDREX 2L',q:22},{s:'PAACMD',d:'W&W PROTETOR E ACABAMENTO ACETINADO MADEIRA',q:0},{s:'AZREMCER1L',d:'START AZULIM REMOVEDOR DE CERA 1L',q:68}],'C21':[{s:'DISCISOP200',d:'DISCO DE ISOPOR 20 CM COM 200 UNIDADES',q:1}],'C22':[{s:'ANTMOF',d:'W&W ANTI MOFO 1L',q:34},{s:'RMMDPL',d:'W&W REMOVEDOR CONCENTRADO DE CERAS E SUJEIRAS MADEIRA PLASTI',q:94},{s:'SELAIMPE1L',d:'W&W SELADOR IMPERMEABILIZANTE 1L',q:83},{s:'TIRAMOFO',d:'W&W TIRA MOFO 1L',q:0}],'C23':[{s:'MAGICO2L',d:'START MAGICO 2L',q:-9}],'C24':[{s:'CX30X31FD',d:'NOBBY CAIXA GUARDANAPO 30X31 FOLHA DUPLA 60 PCTS 50UN',q:4}],'C28':[{s:'ESPOJMG',d:'FLASH LIMP ESPONJA MAGICA',q:45},{s:'MPGRRF',d:'FLASH LIMP REFIL MOP GIRATORIO',q:141},{s:'SUPVASFL',d:'FLASH LIMP SUPORTE PAREDE VASSOURA E RODOS',q:2},{s:'FLAESPDISP',d:'FLASHLIMP ESPONJA COM DISPENSER',q:0}],'C29':[{s:'CXPTRT500',d:'CRISTALCOPO CAIXA POTE 500ML RETANGULAR 25UN',q:30},{s:'PT1000RT',d:'CRISTALCOPO POTE RETANGULAR TR 1000ML 25UN',q:14}],'C31':[{s:'ALCEUC1L',d:'TAUIPE EUCALIPTO ALCOOL PERFUMADO 1L',q:129}],'C32':[{s:'MPLGRF',d:'FLASH LIMP REFIL MOP LIMPEZA GERAL',q:60},{s:'RL30FLS',d:'FLASH LIMP ROLO ADESIVO 30 FLS',q:11},{s:'FLAROLDESC',d:'FLASH LIMP ROLO ADESIVO PLUS 30 FOLHAS',q:112},{s:'TRPLLAV',d:'FLASH LIMP ROLO TIRA PELO LAVAVEL',q:23},{s:'SCRP40X50',d:'FLASH LIMP SACO PARA LAVAR ROUPA  40X50',q:137},{s:'SCRP50X60',d:'FLASH LIMP SACO PARA LAVAR ROUPA  50X60',q:34},{s:'SCRP30X40',d:'FLASH LIMP SACO PARA LAVAR ROUPA 30X40',q:97},{s:'SCLPMQ',d:'FLASHLIMP SACHE LIMPA MAQUINAS DE LAVAR 80G',q:179}],'C33':[{s:'ALCOOL92',d:'TAUIPE ALCOOL LIQUIDO 92% 1L',q:278}],'C35':[{s:'ALCCTC1L',d:'TAUIPE CITRONELA ALCOOL PERFUMADO 1L',q:55}],'C36':[{s:'CABOMOP',d:'FLASH LIMP CABO PARA MOP GIRATÓRIO',q:24},{s:'LAVESM',d:'FLASH LIMP LAVE SEM MANCHAR 20UN',q:264},{s:'MOPCHELI',d:'FLASH LIMP MOP CHENILE',q:1}],'D01':[{s:'FLOORCL5L',d:'RRGJ FLOOR CLEAN 5L',q:93}],'D02':[{s:'ERVGEL500',d:'START AZULIM GEL LIMPADOR ERVA DOCE 500G',q:110},{s:'FLOGEL500',d:'START AZULIM GEL LIMPADOR FLORATTA 500G',q:132},{s:'LAVGEL500',d:'START AZULIM GEL LIMPADOR LAVANDA 500G',q:15},{s:'MARIGEL500',d:'START AZULIM GEL LIMPADOR MARINER 500G',q:82}],'D04':[{s:'GRILL1L',d:'SEVENGEL GRILL 1L',q:110},{s:'GRILL5L',d:'SEVENGEL GRILL 5L',q:16},{s:'MAGIC1L',d:'SEVENGEL MAGIC 3 EM 1 1L',q:3},{s:'STONE1L',d:'SEVENGEL STONE LIMPA PEDRA 1L',q:12}],'D05':[{s:'AZSPYVD',d:'START AZULIM SPRAY LIMPA VIDROS 500ML',q:62},{s:'SPRAYFLOT',d:'START AZULIM FLOTADOR SPRAY 500ML',q:73},{s:'LIMPGRE',d:'START AZULIM LIMPA GRELHAS 500ML',q:89}],'D06':[{s:'PIA34X38',d:'EMBALIXO SACO LIXO PIA E BANHEIRO BRANCO 34X38',q:0}],'D07':[{s:'FLOORCL1L',d:'RRGJ FLOOR CLEAN 1L',q:237},{s:'LPCANIL2L',d:'SEVENGEL LIMPA CANIL LIM+ 2L',q:4},{s:'LPETNT500',d:'SEVENGEL LIMPA ESTOFADO NAUTIC 500ML',q:7},{s:'MAGIC5L',d:'SEVENGEL MAGIC 3 EM 1 5L',q:8},{s:'STONE5L',d:'SEVENGEL STONE LIMPA PEDRA 5L',q:13}],'D08':[{s:'MULTLAR',d:'START AZULIM LARANJA MULTIUSO 500ML',q:217},{s:'MULTLIM',d:'START AZULIM LIMAO MULTIUSO 500ML',q:3},{s:'MULTALCO',d:'START AZULIM MULTIUSO COM ALCOOL 500ML',q:110},{s:'MULTORIG',d:'START AZULIM ORIGINAL MULTIUSO 500ML',q:-4}],'D09':[{s:'BRDOMIN',d:'DOMLINE BRILHO INOX 250ML',q:24}],'D10':[{s:'LIMPCANIL5L',d:'SEVENGEL LIMPA CANIL LIM+ 5L',q:199}],'D11':[{s:'AZTIRLM',d:'START AZULIM TIRA LIMO 500ML',q:32},{s:'PALDENT',d:'PARANA PALITO DE DENTE BAMBU 240UN',q:29},{s:'SP20X30',d:'PARANA SACO PLASTICO 20X30 50UN',q:0},{s:'SP23X38',d:'PARANA SACO PLASTICO 22X38 50UN',q:0},{s:'SP28X42',d:'PARANA SACO PLASTICO 28X42 50UN',q:20},{s:'SP35X50',d:'PARANA SACO PLASTICO 35X50 50UN',q:0}],'D12':[{s:'INOXSPRAY',d:'START AZULIM SPRAY BRILHO INOX 500ML',q:128}],'D13':[{s:'PORCIT5L',d:'START AZULIM CITRUS LIMPA PORCELANATO 5L',q:11},{s:'AZLPPORC5L',d:'START AZULIM LAVANDA LIMPA PORCELANATO 5L',q:22}],'D14':[{s:'MULTCITR',d:'START AZULIM CITRONELA MULTIUSO 500ML',q:145},{s:'MULTFLOR',d:'START AZULIM FLORATA MULTIUSO 500ML',q:167},{s:'AZLPVD',d:'START AZULIM LIMPA VIDROS 500ML',q:124},{s:'MULTBAC',d:'START AZULIM MULTIUSO BACTERICIDA 500ML',q:60}],'D15':[{s:'PTRET500',d:'CRISTALCOPO POTE 500ML RETANGULAR 25UN',q:38},{s:'PTRET250',d:'CRISTALCOPO POTE RETANGULAR 250ML 25UN',q:36},{s:'ESSNCSP',d:'ESCOVA SANITARIA COM SUPORTE',q:29},{s:'ESSNSSP',d:'ESCOVA SANITARIA SEM SUPORTE',q:3}],'D16':[{s:'REMFRIO1L',d:'W&W REMOVEDOR DE CERA PISO FRIO 1L',q:177},{s:'REMLAMVIN1L',d:'W&W REMOVEDOR DE CERA PISO LAMINADOS E VINILICOS 1L',q:358}],'D17':[{s:'PORCECIT750',d:'START AZULIM CITRUS LIMPA PORCELANATO 750ML',q:159},{s:'PORC750ML',d:'START AZULIM LAVANDA LIMPA PORCELANATO 750ML',q:229},{s:'LPLAM750ML',d:'START AZULIM LIMPA PISOS LAMINADOS 750ML',q:-3}],'D18':[{s:'PRDPLAST',d:'PRENDEDOR DE ROUPA EMBORRACHADO 12UN',q:404}],'D19':[{s:'MADBRIL5L',d:'W&W CERA BRILHANTE PARA MADEIRA 5L',q:99},{s:'LAMVIN5L',d:'W&W CERA LAMINADOS E VINILICOS BRILHANTE 5 L',q:14},{s:'LIMPFACIL5L',d:'W&W LIMPA FACIL CONCENTRADO 5L',q:12},{s:'REMMAD5L',d:'W&W REMOVEDOR DE CERAS PISO MADEIRA CONCENTRADO 5 L',q:20},{s:'SODA1KG',d:'INDAIA SODA 1KG',q:271}],'D20':[{s:'AZSPTRLM',d:'START AZULIM SPRAY TIRA LIMO 500ML',q:21},{s:'REMFRIO1L',d:'W&W REMOVEDOR DE CERA PISO FRIO 1L',q:177}],'D22':[{s:'FLANELAAMA',d:'FLANELA AMARELA',q:296},{s:'FLANELABRA',d:'FLANELA BRANCA',q:979},{s:'PANO30X55',d:'PANO DE CHAO SACO ALVEJADO 30X55',q:199},{s:'PANCHASAC',d:'PANO DE CHAO SACO ALVEJADO 43x65',q:0},{s:'XADREZ',d:'PANO SACO XADREZ',q:660}],'D23':[{s:'GEL70VALV',d:'START ASSEPTGEL ALCOOL GEL 70% COM VALVULA 420G',q:-10}],'D24':[{s:'SUPRL',d:'MAZZO SUPORTE ROLAO',q:11}],'D25':[{s:'LAVANET',d:'ULTRA FRESH LAVANDA NEUTRALIZADOR 400ML',q:335},{s:'ROSANET',d:'ULTRA FRESH PETALA DE ROSA NEUTRALIZADOR 400ML',q:27},{s:'SUMMNET',d:'PURO AR NEUTRALIZADOR SUMMER 250ML',q:0}],'D26':[{s:'TALCNET',d:'ULTRA FRESH TALCO NEUTRALIZADOR 400ML',q:0},{s:'BAUNET',d:'PURO AR NEUTRALIZADOR BAUNILHA 250ML',q:1}],'D29':[{s:'MORNET',d:'ULTRA FRESH MORANGO NEUTRALIZADOR 400ML',q:109},{s:'MCCANET',d:'PURO AR NEUTRALIZADOR MAÇA E CANELA 250ML',q:-1}],'D30':[{s:'AMARARA1000',d:'AMARRILHO LACRE FECHO ARAME BRANCO COM 1000 PEÇAS 8CM CADA',q:698},{s:'AMARARA500',d:'AMARRILHO LACRE FECHO ARAME BRANCO COM 500 PEÇAS 8CM CADA',q:128}],'D31':[{s:'EASYFLOR1L',d:'EASYFRESH FLORAL  1 LITRO',q:418}],'D32':[{s:'CAFENET',d:'PURO AR NEUTRALIZADOR CAFÉ 350ML',q:257},{s:'CRCANET250',d:'PURO AR NEUTRALIZADOR CRAVO E CANELA 250ML',q:53}],'D34':[{s:'EASYBOUQ1L',d:'EASYFRESH BOUQUET  1 LITRO',q:0}],'D35':[{s:'FINISHFLOR1L',d:'SPARTAN FINISHERFRESH FLORAL 1L',q:56}]};
+function injectTiny(){
+  Object.entries(TINY).forEach(([a,prods])=>{
+    if(P[a]&&P[a].produtos.length===0){
+      P[a].produtos=prods.map(v=>({sku:v.s,desc:v.d,qty:Math.max(0,v.q)}));
+    }
+  });
+}
+
+function load(){
+  try{
+    const saved=localStorage.getItem(KEY);
+    if(saved){P=JSON.parse(saved);initP();injectTiny();setStatus('✓ Dados carregados','var(--green)');}
+    else{initP();injectTiny();setStatus('✓ Produtos Tiny ERP carregados','var(--green)');}
+  }catch(e){initP();injectTiny();setStatus('Pronto','var(--gray)');}
+  renderAll();
+}
+
+function salvar(){
+  try{localStorage.setItem(KEY,JSON.stringify(P));toast('✓ Salvo!',true);setStatus('✓ Salvo às '+new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),'var(--green)');}
+  catch(e){toast('Erro ao salvar',false);}
+}
+
+function setStatus(t,c){const el=document.getElementById('stxt');el.textContent=t;el.style.color=c;}
+function toast(msg,ok=true){const el=document.getElementById('toast');el.textContent=msg;el.style.background=ok?'#00C07F':'#EF4444';el.style.color=ok?'#0B1F3A':'#fff';el.style.opacity='1';setTimeout(()=>el.style.opacity='0',2500);}
+
+function updateMetrics(){
+  const all=Object.values(P);
+  const ocup=all.filter(p=>p.produtos&&p.produtos.length>0).length;
+  const totalProds=all.reduce((a,p)=>a+(p.produtos?p.produtos.length:0),0);
+  const pct=Math.round(ocup/all.length*100);
+  document.getElementById('mocup').textContent=ocup;
+  document.getElementById('mprod').textContent=totalProds;
+  document.getElementById('mpct').textContent=pct+'%';
+  const bar=document.getElementById('mbar');
+  bar.style.width=pct+'%';
+  bar.style.background=pct>85?'#EF4444':pct>60?'#F59E0B':'#00C07F';
+}
+
+function renderAll(){updateMetrics();renderMapa();renderLista();renderResume();}
+
+function renderMapa(){
+  const el=document.getElementById('mapa');
+  el.innerHTML=Object.entries(LAYOUT).map(([cor,cols])=>{
+    const ocup=Object.values(P).filter(p=>p.cor===cor&&p.produtos&&p.produtos.length>0).length;
+    const total=cols*3;
+    const pct=Math.round(ocup/total*100);
+    return`<div class="cb">
+      <div class="ch">
+        <div class="ctag">${cor}</div>
+        <div class="cinfo">${cols} colunas · ${total} paletes · ${ocup} ocupados</div>
+        <div class="cpct">${pct}%</div>
+      </div>
+      <div class="pscroll"><div class="prow">
+        ${Array.from({length:cols},(_,ci)=>{
+          const c=ci+1;
+          return`<div class="col">
+            <div class="collabel">C${c}</div>
+            ${[3,2,1].map(n=>{
+              const a=addr(cor,c,n);const pp=P[a];
+              const np=pp&&pp.produtos?pp.produtos.length:0;
+              const cls=np>1?'multi':np===1?'single':'';
+              const selcls=sel===a?'sel':'';
+              const label=np===0?'':`<div class="pcount">${np} prod</div>`;
+              const skushow=np===1?`<div class="psku">${pp.produtos[0].sku}</div>`:'';
+              return`<div class="pal ${cls} ${selcls}" onclick="openModal('${a}')" title="${a}${np>0?' — '+np+' produto(s)':''}">
+                <div class="paddr">${a}</div>
+                <div class="pniv">${NL[n-1][0]}</div>
+                ${label}${skushow}
+              </div>`;
+            }).join('')}
+          </div>`;
+        }).join('')}
+      </div></div>
+    </div>`;
+  }).join('');
+}
+
+function renderLista(){
+  const el=document.getElementById('lbody');
+  const txt=(document.getElementById('ftxt')||{value:''}).value.toLowerCase();
+  const cor=(document.getElementById('fcor')||{value:''}).value;
+  const st=(document.getElementById('fst')||{value:''}).value;
+  let all=Object.values(P).sort((a,b)=>a.addr.localeCompare(b.addr));
+  if(txt) all=all.filter(p=>{
+    if(p.addr.toLowerCase().includes(txt)) return true;
+    return p.produtos&&p.produtos.some(pr=>pr.desc.toLowerCase().includes(txt)||pr.sku.toLowerCase().includes(txt));
+  });
+  if(cor) all=all.filter(p=>p.cor===cor);
+  if(st==='ocup') all=all.filter(p=>p.produtos&&p.produtos.length>0);
+  if(st==='livre') all=all.filter(p=>!p.produtos||p.produtos.length===0);
+  if(!all.length){el.innerHTML='<div class="empty">Nenhum resultado.</div>';return}
+  el.innerHTML=all.map(p=>{
+    const np=p.produtos?p.produtos.length:0;
+    const skus=np?p.produtos.map(pr=>pr.sku).join(', '):'—';
+    const qtTotal=np?p.produtos.reduce((a,pr)=>a+pr.qty,0):0;
+    const desc=np?p.produtos.map(pr=>pr.desc).join(' · '):'<span style="color:rgba(143,163,184,.4)">Livre</span>';
+    return`<div class="lrow" onclick="openModal('${p.addr}')">
+      <span style="font-family:'DM Mono',monospace;font-weight:600;color:var(--green)">${p.addr}</span>
+      <span>${npill(p.niv)}</span>
+      <span style="color:var(--gray)">Corredor ${p.cor}</span>
+      <span style="font-size:11px">${desc}</span>
+      <span style="font-size:10px;color:var(--gray);font-family:'DM Mono',monospace">${skus.slice(0,30)}${skus.length>30?'…':''}</span>
+      <span style="font-size:11px;font-family:'DM Mono',monospace">${np?qtTotal+'un':'—'}</span>
+      <button class="ebtn" onclick="event.stopPropagation();openModal('${p.addr}')">Editar</button>
+    </div>`;
+  }).join('');
+}
+
+function renderResume(){
+  const el=document.getElementById('rresume');if(!el)return;
+  el.innerHTML=Object.entries(LAYOUT).map(([cor,cols])=>{
+    const total=cols*3;
+    const ocup=Object.values(P).filter(p=>p.cor===cor&&p.produtos&&p.produtos.length>0).length;
+    const pct=Math.round(ocup/total*100);
+    return`<div class="rrow">
+      <div class="rlabel">${cor}</div>
+      <div class="rbg"><div class="rbf" style="width:${pct}%;background:${pct>85?'#EF4444':pct>60?'#F59E0B':'#00C07F'}"></div></div>
+      <div class="rval">${ocup}/${total} (${pct}%)</div>
+    </div>`;
+  }).join('');
+}
+
+function buscar(){
+  const q=(document.getElementById('sinput')||{value:''}).value.trim().toLowerCase();
+  const el=document.getElementById('sres');
+  if(!q){el.innerHTML='';return}
+  const res=Object.values(P).filter(p=>p.produtos&&p.produtos.some(pr=>pr.desc.toLowerCase().includes(q)||pr.sku.toLowerCase().includes(q)));
+  if(!res.length){el.innerHTML='<div class="empty">Nenhum produto encontrado.</div>';return}
+  // Flatten: show each matching product with its location
+  const rows=[];
+  res.forEach(p=>{
+    p.produtos.filter(pr=>pr.desc.toLowerCase().includes(q)||pr.sku.toLowerCase().includes(q)).forEach(pr=>{
+      rows.push({addr:p.addr,niv:p.niv,cor:p.cor,pr});
+    });
+  });
+  el.innerHTML=`<div style="font-size:12px;color:var(--gray);margin-bottom:8px">${rows.length} resultado(s):</div>`+
+  `<div class="lhead" style="grid-template-columns:70px 52px 55px 1fr 75px 60px 70px"><span>Endereço</span><span>Nível</span><span>Corredor</span><span>Produto</span><span>SKU</span><span>Qtd</span><span></span></div>`+
+  rows.map(r=>`<div class="lrow" onclick="openModal('${r.addr}')" style="grid-template-columns:70px 52px 55px 1fr 75px 60px 70px">
+    <span style="font-family:'DM Mono',monospace;font-weight:600;color:var(--green)">${r.addr}</span>
+    <span>${npill(r.niv)}</span>
+    <span style="color:var(--gray)">${r.cor}</span>
+    <span>${r.pr.desc}</span>
+    <span style="font-size:11px;color:var(--gray);font-family:'DM Mono',monospace">${r.pr.sku}</span>
+    <span style="font-family:'DM Mono',monospace">${r.pr.qty}un</span>
+    <button class="ebtn" onclick="event.stopPropagation();openModal('${r.addr}')">Ver palete</button>
+  </div>`).join('');
+}
+
+// ── MODAL ──
+function openModal(a){
+  sel=a;const pp=P[a];
+  modalProds=JSON.parse(JSON.stringify(pp.produtos||[]));
+  document.getElementById('maddr').textContent=a;
+  document.getElementById('msub').textContent='Corredor '+pp.cor+' · Coluna '+pp.col+' · '+NL[pp.niv-1];
+  document.getElementById('nprod').value='';document.getElementById('nsku').value='';document.getElementById('nqtd').value=0;document.getElementById('nerr').textContent='';
+  renderModalProds();
+  document.getElementById('mwrap').style.display='flex';
+  renderMapa();
+}
+
+function renderModalProds(){
+  const el=document.getElementById('mbody');
+  if(!modalProds.length){el.innerHTML='<div style="font-size:13px;color:var(--gray);padding:8px 0;margin-bottom:8px">Nenhum produto neste palete ainda.</div>';return}
+  el.innerHTML=modalProds.map((pr,i)=>`<div class="prod-item">
+    <button class="pi-del" onclick="delProd(${i})" title="Remover">✕</button>
+    <div class="pi-sku">${pr.sku}</div>
+    <div class="pi-desc">${pr.desc}</div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <span class="pi-qty">Quantidade:</span>
+      <input type="number" value="${pr.qty}" min="0" style="width:80px;background:var(--navy-card);border:1px solid var(--border);border-radius:4px;color:#fff;padding:3px 7px;font-size:12px;font-family:'DM Mono',monospace" onchange="modalProds[${i}].qty=parseInt(this.value)||0">
+    </div>
+  </div>`).join('');
+}
+
+function addProd(){
+  const desc=document.getElementById('nprod').value.trim();
+  const sku=document.getElementById('nsku').value.trim();
+  const qty=parseInt(document.getElementById('nqtd').value)||0;
+  const err=document.getElementById('nerr');
+  if(!desc||!sku){err.textContent='Preencha produto e SKU.';return}
+  modalProds.push({sku,desc,qty});
+  document.getElementById('nprod').value='';document.getElementById('nsku').value='';document.getElementById('nqtd').value=0;err.textContent='';
+  renderModalProds();
+}
+
+function delProd(i){modalProds.splice(i,1);renderModalProds();}
+
+function salvarModal(){
+  if(!sel)return;
+  P[sel].produtos=JSON.parse(JSON.stringify(modalProds));
+  salvar();closeModal();renderAll();
+  toast('✓ Palete '+sel+' salvo!');
+}
+
+function closeModal(){document.getElementById('mwrap').style.display='none';sel=null;renderMapa();}
+
+// ── CSV ──
+function importCSV(){
+  const raw=document.getElementById('csvtxt').value.trim();
+  const msg=document.getElementById('imsg');
+  if(!raw){msg.style.color='var(--red)';msg.textContent='Cole o CSV acima.';return}
+  const lines=raw.split('\n').map(l=>l.trim()).filter(Boolean);
+  let ok=0,errs=[];
+  // Clear existing antes de importar
+  const toAdd={};
+  lines.forEach((line,i)=>{
+    const parts=line.split(',');
+    const a=(parts[0]||'').trim().toUpperCase();
+    const sku=(parts[1]||'').trim();
+    const desc=(parts[2]||'').trim();
+    const qty=parseInt(parts[3])||0;
+    if(!a||!P[a]){errs.push('L'+(i+1)+': endereço inválido ('+a+')');return}
+    if(!sku||!desc){errs.push('L'+(i+1)+': SKU ou produto vazio');return}
+    if(!toAdd[a]) toAdd[a]=[];
+    toAdd[a].push({sku,desc,qty});ok++;
+  });
+  Object.entries(toAdd).forEach(([a,prods])=>{P[a].produtos=prods;});
+  salvar();renderAll();
+  msg.style.color=errs.length?'#F59E0B':'var(--green)';
+  msg.textContent=ok+' linhas importadas.'+(errs.length?' Erros: '+errs.join('; '):'');
+  toast('Importação: '+ok+' linhas.');
+}
+
+function gerarTemplate(){
+  const rows=['endereco,sku,produto,quantidade'];
+  Object.values(P).sort((a,b)=>a.addr.localeCompare(b.addr)).forEach(p=>{
+    if(p.produtos&&p.produtos.length){
+      p.produtos.forEach(pr=>rows.push(`${p.addr},${pr.sku},${pr.desc},${pr.qty}`));
+    } else {
+      rows.push(`${p.addr},,,`);
+    }
+  });
+  return rows.join('\n');
+}
+
+function exportCSV(){
+  const rows=['endereco,corredor,nivel,sku,produto,quantidade'];
+  Object.values(P).sort((a,b)=>a.addr.localeCompare(b.addr)).forEach(p=>{
+    if(p.produtos&&p.produtos.length){
+      p.produtos.forEach(pr=>rows.push(`${p.addr},${p.cor},${NL[p.niv-1]},${pr.sku},"${pr.desc}",${pr.qty}`));
+    } else {
+      rows.push(`${p.addr},${p.cor},${NL[p.niv-1]},,,`);
+    }
+  });
+  const blob=new Blob([rows.join('\n')],{type:'text/csv;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const link=document.createElement('a');link.href=url;link.download='higienita_armazem.csv';link.click();
+  URL.revokeObjectURL(url);toast('CSV exportado!');
+}
+
+function limpar(){
+  if(!confirm('Limpar TODOS os dados? Não pode ser desfeito.'))return;
+  Object.keys(P).forEach(k=>P[k].produtos=[]);
+  salvar();renderAll();toast('Dados limpos.',false);
+}
+
+function showTab(name){
+  ['mapa','lista','buscar','importar','relatorio'].forEach(t=>{
+    document.getElementById('tab-'+t).style.display=t===name?'block':'none';
+  });
+  document.querySelectorAll('.tab').forEach((b,i)=>{
+    b.classList.toggle('active',['mapa','lista','buscar','importar','relatorio'][i]===name);
+  });
+  if(name==='lista')renderLista();
+  if(name==='relatorio')renderResume();
+}
+
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal();});
+load();
+</script>
+</body>
+</html>
