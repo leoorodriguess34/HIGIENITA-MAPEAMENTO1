@@ -220,8 +220,16 @@ def sincronizar():
     agora = datetime.datetime.now().isoformat()
     ref = db.reference('/')
     
-    ref.child('catalogo').set(catalogo)
-    print('  catalogo salvo')
+    # Firebase nao aceita chaves com . # $ [ ] / 
+    # Sanitiza os SKUs para usar como chaves
+    def sanitize_key(key):
+        for char in ['.', '#', '$', '[', ']', '/', ' ']:
+            key = key.replace(char, '_')
+        return key or 'SEM_SKU'
+    
+    catalogo_safe = {sanitize_key(k): v for k, v in catalogo.items()}
+    ref.child('catalogo').set(catalogo_safe)
+    print(f'  catalogo salvo ({len(catalogo_safe)} produtos)')
     
     ref.child('alertas_estoque').set({
         'items': alertas,
