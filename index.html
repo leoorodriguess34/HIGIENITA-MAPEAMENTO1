@@ -211,7 +211,7 @@ var fbConfig = {
 };
 firebase.initializeApp(fbConfig);
 var db = firebase.firestore();
-var DOC = db.collection('armazem').doc('paletes');
+var COL = db.collection('paletes');
 
 var LAYOUT = {"A":21,"B":14,"C":14,"D":12,"E":12};
 var NL = ['Chao','Meio','Topo'];
@@ -258,14 +258,13 @@ function toast(msg,ok){
 
 function load(){
   initP(); injectTiny();
-  DOC.onSnapshot(function(snap){
+  COL.onSnapshot(function(snapshot){
     initP(); injectTiny();
-    if(snap.exists){
-      var saved=snap.data();
-      Object.keys(saved).forEach(function(a){
-        if(P[a] && saved[a].produtos!==undefined) P[a].produtos=saved[a].produtos;
-      });
-    }
+    snapshot.forEach(function(doc){
+      var a = doc.id;
+      var data = doc.data();
+      if(P[a] && data.produtos !== undefined) P[a].produtos = data.produtos;
+    });
     document.getElementById('ldr').style.display='none';
     var n=Object.values(P).filter(function(p){return p.produtos.length>0;}).length;
     setStatus('Online - '+n+' paletes ocupados','var(--green)',true);
@@ -280,12 +279,11 @@ function load(){
 function salvarFirebase(addr){
   setStatus('Salvando...','var(--amber)',true);
   document.getElementById('dot').className='dot sv';
-  var data = {}; data[addr] = {produtos: P[addr].produtos};
-  DOC.set(data,{merge:true}).then(function(){
+  COL.doc(addr).set({produtos: P[addr].produtos}).then(function(){
     setStatus('Salvo!','var(--green)',true);
     toast('Palete '+addr+' salvo!',true);
   }).catch(function(e){
-    setStatus('Erro ao salvar','var(--red)',false);
+    setStatus('Erro: '+e.code,'var(--red)',false);
     toast('Erro: '+e.message,false);
     console.error(e);
   });
@@ -293,10 +291,20 @@ function salvarFirebase(addr){
 
 function salvarTudo(){
   setStatus('Salvando tudo...','var(--amber)',true);
-  var data={};
-  Object.values(P).forEach(function(p){ data[p.addr]={produtos:p.produtos}; });
-  return DOC.set(data).then(function(){
-    setStatus('Tudo salvo!','var(--green)',true);
+  var batch = db.batch();
+  var count = 0;
+  Object.values(P).forEach(function(p){
+    if(p.produtos.length > 0){
+      batch.set(COL.doc(p.addr), {produtos: p.produtos});
+      count++;
+    }
+  });
+  if(count === 0){
+    setStatus('Nada para salvar','var(--gray)',false);
+    return Promise.resolve();
+  }
+  return batch.commit().then(function(){
+    setStatus('Tudo salvo! ('+count+' paletes)','var(--green)',true);
     toast('Importacao salva!',true);
   }).catch(function(e){
     toast('Erro: '+e.message,false);
@@ -513,8 +521,14 @@ function exportCSV(){
 
 function limpar(){
   if(!confirm('Limpar TODOS os dados? Nao pode ser desfeito.')) return;
-  Object.keys(P).forEach(function(k){ P[k].produtos=[]; });
-  salvarTudo().then(function(){ renderAll(); }); toast('Dados limpos.',false);
+  var batch = db.batch();
+  Object.keys(P).forEach(function(k){
+    P[k].produtos=[];
+    batch.delete(COL.doc(k));
+  });
+  batch.commit().then(function(){
+    renderAll(); toast('Dados limpos.',false);
+  });
 }
 
 function showTab(name){
