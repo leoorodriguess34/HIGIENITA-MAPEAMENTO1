@@ -251,12 +251,25 @@ def sincronizar():
         catalogo_safe[safe_key] = sanitize_item(v)
 
     # Save in chunks of 200 to avoid large payload issues
+    # Salva em chunks pequenos de 50 produtos para evitar limite de 10MB
     catalogo_items = list(catalogo_safe.items())
-    chunk_size = 200
+    chunk_size = 50
+    total_chunks = (len(catalogo_items) + chunk_size - 1) // chunk_size
     for i in range(0, len(catalogo_items), chunk_size):
         chunk = dict(catalogo_items[i:i+chunk_size])
-        ref.child('catalogo').update(chunk)
-        print(f'  catalogo: chunk {i//chunk_size + 1} salvo ({min(i+chunk_size, len(catalogo_items))}/{len(catalogo_items)})')
+        chunk_num = i // chunk_size + 1
+        try:
+            ref.child('catalogo').update(chunk)
+            print(f'  catalogo: chunk {chunk_num}/{total_chunks} salvo ({min(i+chunk_size, len(catalogo_items))}/{len(catalogo_items)})')
+        except Exception as e:
+            print(f'  ERRO no chunk {chunk_num}: {e}')
+            # Tenta salvar item por item neste chunk
+            for k, v in chunk.items():
+                try:
+                    ref.child('catalogo').child(k).set(v)
+                except Exception as e2:
+                    print(f'    Ignorando SKU {k}: {e2}')
+        time.sleep(0.5)  # Pequena pausa entre chunks
     print(f'  catalogo completo: {len(catalogo_safe)} produtos')
     
     ref.child('alertas_estoque').set({
