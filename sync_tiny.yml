@@ -1,0 +1,33 @@
+name: Sincronizar Tiny ERP com Firebase
+
+on:
+  schedule:
+    # Roda a cada 2 horas (evita rate limit do Tiny)
+    - cron: '0 */2 * * *'
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60  # Permite ate 60 minutos (700 produtos x 2.5s = ~30min)
+    steps:
+      - name: Checkout repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Instalar dependencias
+        run: pip install requests firebase-admin
+
+      - name: Executar sincronizacao
+        env:
+          TINY_TOKEN: ${{ secrets.TINY_TOKEN }}
+          FIREBASE_CREDENTIALS: ${{ secrets.FIREBASE_CREDENTIALS }}
+        run: python sync_tiny.py
+
+      - name: Log resultado
+        if: always()
+        run: echo "Sincronizacao finalizada em $(date)"
