@@ -220,16 +220,44 @@ def sincronizar():
     agora = datetime.datetime.now().isoformat()
     ref = db.reference('/')
     
-    # Firebase nao aceita chaves com . # $ [ ] / 
-    # Sanitiza os SKUs para usar como chaves
+    # Firebase nao aceita chaves com . # $ [ ] /
     def sanitize_key(key):
-        for char in ['.', '#', '$', '[', ']', '/', ' ']:
+        if not key:
+            return 'SEM_SKU'
+        for char in ['.', '#', '$', '[', ']', '/', ' ', '@', '!', '%', '&', '*', '+', '=', '?', '<', '>', ',', ';', ':', "'", '"']:
             key = key.replace(char, '_')
-        return key or 'SEM_SKU'
-    
-    catalogo_safe = {sanitize_key(k): v for k, v in catalogo.items()}
-    ref.child('catalogo').set(catalogo_safe)
-    print(f'  catalogo salvo ({len(catalogo_safe)} produtos)')
+        return key.strip('_') or 'SEM_SKU'
+
+    def sanitize_str(val):
+        if not isinstance(val, str):
+            return val
+        # Remove control chars and problematic Unicode
+        return val.encode('ascii', 'ignore').decode('ascii').strip()
+
+    def sanitize_item(item):
+        return {
+            'sku':        sanitize_str(item.get('sku', '')),
+            'desc':       sanitize_str(item.get('desc', '')),
+            'un':         sanitize_str(item.get('un', '')),
+            'disponivel': float(item.get('disponivel', 0) or 0),
+            'reservado':  float(item.get('reservado', 0) or 0),
+            'saldo':      float(item.get('saldo', 0) or 0),
+            'alerta':     bool(item.get('alerta', False)),
+        }
+
+    catalogo_safe = {}
+    for k, v in catalogo.items():
+        safe_key = sanitize_key(k)
+        catalogo_safe[safe_key] = sanitize_item(v)
+
+    # Save in chunks of 200 to avoid large payload issues
+    catalogo_items = list(catalogo_safe.items())
+    chunk_size = 200
+    for i in range(0, len(catalogo_items), chunk_size):
+        chunk = dict(catalogo_items[i:i+chunk_size])
+        ref.child('catalogo').update(chunk)
+        print(f'  catalogo: chunk {i//chunk_size + 1} salvo ({min(i+chunk_size, len(catalogo_items))}/{len(catalogo_items)})')
+    print(f'  catalogo completo: {len(catalogo_safe)} produtos')
     
     ref.child('alertas_estoque').set({
         'items': alertas,
