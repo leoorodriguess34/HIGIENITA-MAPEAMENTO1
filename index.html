@@ -1253,8 +1253,7 @@ function confirmarProduto(sku){
   }
 
   if(!found){
-    var desc = prompt('Produto "' + sku + '" nao encontrado.
-Digite o nome do produto:');
+        var desc = prompt('Produto ' + sku + ' nao encontrado. Digite o nome do produto:');
     if(!desc) return;
     found = {sku: sku, desc: desc, qty: 1};
   }
