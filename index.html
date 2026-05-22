@@ -1876,8 +1876,8 @@ function renderSeparacao(){
             var parc = bip>0&&bip<it.qtd;
             var bg = ok?'rgba(0,192,127,.06)':parc?'rgba(245,158,11,.06)':'transparent';
             var qc = ok?'var(--green)':parc?'var(--amber)':'#fff';
-            var btn = p.status==='em_separacao' ?
-              '<button onclick="biparItemSep(''+p.numero+'','+i+','+it.qtd+')" style="background:none;border:1px solid rgba(0,192,127,.4);border-radius:4px;color:var(--green);font-size:10px;padding:2px 6px;cursor:pointer">'+(ok?'OK':'bipar')+'</button>' : '';
+            var btn = '';
+            if(p.status==='em_separacao'){ var pn=String(p.numero).replace(/[^a-zA-Z0-9]/g,''); btn='<button data-p="'+pn+'" data-i="'+i+'" data-q="'+it.qtd+'" onclick="var t=this;biparItemSep(t.dataset.p,t.dataset.i,t.dataset.q)" style="background:none;border:1px solid rgba(0,192,127,.4);border-radius:4px;color:var(--green);font-size:10px;padding:2px 6px;cursor:pointer">'+(ok?'OK':'bipar')+'</button>'; }
             return '<div style="display:grid;grid-template-columns:90px 1fr 60px 60px 60px;padding:7px 8px;border-bottom:1px solid var(--bdr);font-size:12px;background:'+bg+'">' +
               '<span style="font-family:DM Mono,monospace;color:var(--green);font-size:11px">'+it.sku+'</span>' +
               '<span style="color:#fff">'+it.desc+'</span>' +
@@ -2220,4 +2220,8 @@ window.showTab = function(name){
     if(el) el.style.display='none';
   });
 };
-</script>
+</script>var btn = '';
+            if(p.status==='em_separacao'){
+              var pedNum = String(p.numero).replace(/'/g,'');
+              btn = '<button data-p="' + pedNum + '" data-i="' + i + '" data-q="' + it.qtd + '" onclick="biparItemSep(this.getAttribute(\'data-p\'),this.getAttribute(\'data-i\'),this.getAttribute(\'data-q\'))" style="background:none;border:1px solid rgba(0,192,127,.4);border-radius:4px;color:var(--green);font-size:10px;padding:2px 6px;cursor:pointer">' + (ok?'OK':'bipar') + '</button>';
+            }
