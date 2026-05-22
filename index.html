@@ -435,9 +435,9 @@ body{font-family:'Sora',sans-serif;background:var(--navy);color:#fff;min-height:
   <div id="tab-separacao" style="display:none">
     <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
       <div style="display:flex;gap:2px;background:var(--mid);border-radius:var(--rs);padding:2px">
-        <button onclick="setSepView('pendentes')" id="sv-pendentes" class="btn" style="padding:5px 12px;font-size:12px;border-radius:4px;background:var(--green);color:var(--navy)">Pendentes</button>
+        <button onclick="setSepView('pendente')" id="sv-pendente" class="btn" style="padding:5px 12px;font-size:12px;border-radius:4px;background:var(--green);color:var(--navy)">Pendentes</button>
         <button onclick="setSepView('em_separacao')" id="sv-em_separacao" class="btn" style="padding:5px 12px;font-size:12px;border-radius:4px;background:transparent;color:var(--gray)">Em separacao</button>
-        <button onclick="setSepView('concluidos')" id="sv-concluidos" class="btn" style="padding:5px 12px;font-size:12px;border-radius:4px;background:transparent;color:var(--gray)">Concluidos</button>
+        <button onclick="setSepView('concluido')" id="sv-concluido" class="btn" style="padding:5px 12px;font-size:12px;border-radius:4px;background:transparent;color:var(--gray)">Concluidos</button>
       </div>
       <button class="btn bp" onclick="novosPedidosTiny()" style="margin-left:auto">Importar do Tiny</button>
       <button class="btn bs" onclick="novoPedidoManual()">+ Novo pedido manual</button>
@@ -1787,11 +1787,11 @@ function loadRecebimentos(){
 // SEPARACAO DE PEDIDOS
 // 
 
-var sepView = 'pendentes';
+var sepView = 'pendente';
 
 function setSepView(v){
   sepView = v;
-  ['pendentes','em_separacao','concluidos'].forEach(function(x){
+  ['pendente','em_separacao','concluido'].forEach(function(x){
     var btn=document.getElementById('sv-'+x);
     if(btn){ btn.style.background=x===v?'var(--green)':'transparent'; btn.style.color=x===v?'var(--navy)':'var(--gray)'; }
   });
@@ -1806,13 +1806,13 @@ function novosPedidosTiny(){
     var pedidos = Object.values(val.items);
     var count = 0;
     var updates = {};
-    pedidos.forEach(function(p){
-      if(!p.numero) return;
-      var key = 'pedidos/'+p.numero;
+    pedidos.forEach(function(p, i){
+      var num = p.numero || p.id || ('IMP'+i);
+      var key = 'pedidos/'+num;
       updates[key] = {
-        numero: p.numero, cliente: p.cliente||'', valor: p.valor||0,
-        data: p.data||'', status: 'pendente', origem: 'tiny',
-        ts: Date.now(), itens: []
+        numero: num, cliente: p.cliente||p.nome_contato||'', valor: p.valor||0,
+        data: p.data||p.data_pedido||'', status: 'pendente', origem: 'tiny',
+        ts: Date.now(), itens: p.itens||[]
       };
       count++;
     });
