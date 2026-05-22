@@ -1877,8 +1877,9 @@ function renderSeparacao(){
             var bg = ok?'rgba(0,192,127,.06)':parc?'rgba(245,158,11,.06)':'transparent';
             var qc = ok?'var(--green)':parc?'var(--amber)':'#fff';
             var btn = '';
-            if(p.status==='em_separacao'){ var pn=String(p.numero).replace(/[^a-zA-Z0-9]/g,''); btn='<button data-p="'+pn+'" data-i="'+i+'" data-q="'+it.qtd+'" onclick="var t=this;biparItemSep(t.dataset.p,t.dataset.i,t.dataset.q)" style="background:none;border:1px solid rgba(0,192,127,.4);border-radius:4px;color:var(--green);font-size:10px;padding:2px 6px;cursor:pointer">'+(ok?'OK':'bipar')+'</button>'; }
-            return '<div style="display:grid;grid-template-columns:90px 1fr 60px 60px 60px;padding:7px 8px;border-bottom:1px solid var(--bdr);font-size:12px;background:'+bg+'">' +
+            if(p.status==='em_separacao'){
+              btn='<button data-p="'+p.numero+'" data-i="'+i+'" data-q="'+it.qtd+'" onclick="biparItemSepBtn(this)" style="background:none;border:1px solid rgba(0,192,127,.4);border-radius:4px;color:var(--green);font-size:10px;padding:2px 6px;cursor:pointer">'+(ok?'OK':'bipar')+'</button>';
+            }
               '<span style="font-family:DM Mono,monospace;color:var(--green);font-size:11px">'+it.sku+'</span>' +
               '<span style="color:#fff">'+it.desc+'</span>' +
               '<span style="font-family:DM Mono,monospace;text-align:center">'+it.qtd+'</span>' +
@@ -1893,11 +1894,11 @@ function renderSeparacao(){
 
       var actions = '';
       if(p.status==='pendente'){
-        actions = '<button class="btn bp" onclick="iniciarSeparacao(''+p.numero+'')" style="padding:6px 14px;font-size:12px;white-space:nowrap">Iniciar separacao</button>';
+        actions = '<button class="btn bp" data-num="'+p.numero+'" onclick="iniciarSeparacao(this.getAttribute(\'data-num\'))" style="padding:6px 14px;font-size:12px;white-space:nowrap">Iniciar separacao</button>';
       } else if(p.status==='em_separacao'){
         actions = '<div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">' +
-          '<button class="btn" style="padding:6px 14px;font-size:12px;background:var(--green);color:var(--navy);white-space:nowrap" onclick="concluirSeparacao(''+p.numero+'')">Concluir pedido</button>' +
-          '<button class="btn bs" style="padding:4px 10px;font-size:11px;white-space:nowrap" onclick="abrirBipSep(''+p.numero+'')">Bipar produto</button>' +
+          '<button class="btn" data-num="'+p.numero+'" style="padding:6px 14px;font-size:12px;background:var(--green);color:var(--navy);white-space:nowrap" onclick="concluirSeparacao(this.getAttribute(\'data-num\'))">Concluir pedido</button>' +
+          '<button class="btn bs" data-num="'+p.numero+'" style="padding:4px 10px;font-size:11px;white-space:nowrap" onclick="abrirBipSep(this.getAttribute(\'data-num\'))">Bipar produto</button>' +
         '</div>';
       }
 
@@ -2179,6 +2180,10 @@ function biparItemSepPorSku(numPedido, sku){
       renderSeparacao();
     });
   });
+}
+
+function biparItemSepBtn(el){
+  biparItemSep(el.getAttribute('data-p'), el.getAttribute('data-i'), el.getAttribute('data-q'));
 }
 
 function biparItemSep(numPedido, idx, qtdTotal){
