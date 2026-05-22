@@ -994,53 +994,6 @@ function confirmarPalete(addr){
   renderOpStep();
 }
 
-function confirmarProduto(sku){
-  sku = (sku||'').trim();
-  if(!sku){ alert('Informe o SKU do produto'); return; }
-
-  // Search in TINY data first
-  var found = null;
-  Object.keys(TINY).forEach(function(addr){
-    TINY[addr].forEach(function(p){
-      if(p.s === sku || p.s.toUpperCase() === sku.toUpperCase()){
-        found = {sku: p.s, desc: p.d, qty: 1};
-      }
-    });
-  });
-
-  // Also search in current P data
-  if(!found){
-    Object.values(P).forEach(function(pal){
-      pal.produtos.forEach(function(p){
-        if(p.sku === sku || p.sku.toUpperCase() === sku.toUpperCase()){
-          found = {sku: p.sku, desc: p.desc, qty: 1};
-        }
-      });
-    });
-  }
-
-  if(!found){
-    // Unknown product - ask for description
-    var desc = prompt('Produto "' + sku + '" nao encontrado no sistema.\nDigite o nome do produto:');
-    if(!desc) return;
-    found = {sku: sku, desc: desc, qty: 1};
-  }
-
-  // Check if already in list
-  var existing = opState.produtos.find(function(p){ return p.sku === found.sku; });
-  if(existing){
-    existing.qty += 1;
-  } else {
-    opState.produtos.push(found);
-  }
-  renderOpStep();
-
-  // Focus quantity input after adding
-  setTimeout(function(){
-    var inputs = document.querySelectorAll('.op-qty-input');
-    if(inputs.length > 0) inputs[inputs.length-1].focus();
-  }, 100);
-}
 
 function changeQty(i, delta){
   opState.produtos[i].qty = Math.max(0, (opState.produtos[i].qty||0) + delta);
