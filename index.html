@@ -169,6 +169,21 @@ body{font-family:'Sora',sans-serif;background:var(--navy);color:#fff;min-height:
 .op-del{background:none;border:none;color:#EF4444;cursor:pointer;font-size:16px;padding:4px}
 .op-fab{position:fixed;bottom:24px;right:20px;width:56px;height:56px;border-radius:50%;background:#00C07F;color:#0B1F3A;border:none;font-size:24px;cursor:pointer;box-shadow:0 4px 16px rgba(0,192,127,.4);z-index:200;display:flex;align-items:center;justify-content:center}
 .op-fab:hover{background:#009960}
+.est-row{display:grid;grid-template-columns:70px 1fr 80px 80px 80px 80px 80px;gap:6px;align-items:center;padding:8px 10px;background:var(--card);border:1px solid var(--bdr);border-radius:var(--rs);margin-bottom:3px;font-size:12px}
+.est-row.alerta{border-color:rgba(239,68,68,.4);background:rgba(239,68,68,.05)}
+.est-row.diff{border-color:rgba(245,158,11,.4);background:rgba(245,158,11,.05)}
+.est-sku{font-family:'DM Mono',monospace;font-weight:600;color:var(--green);font-size:11px}
+.est-num{font-family:'DM Mono',monospace;text-align:right}
+.est-alert{color:var(--red);font-weight:600}
+.est-warn{color:var(--amber);font-weight:600}
+.est-ok{color:var(--green)}
+.diff-badge{font-size:10px;padding:2px 7px;border-radius:20px;font-family:'DM Mono',monospace;text-align:center}
+/* Op comparison */
+.op-tiny-info{background:rgba(0,192,127,.06);border:1px solid rgba(0,192,127,.2);border-radius:var(--rs);padding:10px 12px;margin-bottom:6px;display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.op-tiny-col{text-align:center;min-width:70px}
+.op-tiny-label{font-size:10px;color:var(--gray);text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px}
+.op-tiny-val{font-size:18px;font-weight:700;font-family:'DM Mono',monospace}
+.op-diff-warn{background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);border-radius:var(--rs);padding:8px 12px;font-size:12px;color:var(--amber);margin-bottom:8px}
 .op-success{text-align:center;padding:40px 20px}
 .op-success-icon{font-size:64px;margin-bottom:16px}
 .op-success-title{font-size:20px;font-weight:700;color:#fff;margin-bottom:8px}
@@ -232,6 +247,7 @@ body{font-family:'Sora',sans-serif;background:var(--navy);color:#fff;min-height:
   <button class="tab" onclick="showTab('importar')">Importar CSV</button>
   <button class="tab" onclick="showTab('relatorio')">Relatorio</button>
   <button class="tab" onclick="showTab('operacao')">Operacao</button>
+  <button class="tab" onclick="showTab('estoque')">Estoque Tiny</button>
 </div>
 <div class="content">
   <div id="tab-mapa">
@@ -300,6 +316,25 @@ body{font-family:'Sora',sans-serif;background:var(--navy);color:#fff;min-height:
       </div>
     </div>
     <div id="qr-grid" class="qr-print-grid"></div>
+  </div>
+  <div id="tab-estoque" style="display:none">
+    <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
+      <div id="sync-status" style="font-size:12px;color:var(--gray)">Carregando dados do Tiny...</div>
+      <div style="margin-left:auto;display:flex;gap:8px">
+        <select id="est-filtro" onchange="renderEstoque()" style="background:var(--card);border:1px solid var(--bdr);border-radius:var(--rs);color:#fff;padding:7px 11px;font-size:12px;font-family:Sora,sans-serif;outline:none">
+          <option value="">Todos os produtos</option>
+          <option value="alerta">Apenas alertas</option>
+          <option value="reservado">Com reservado > 0</option>
+          <option value="diff">Diferenca WMS x Tiny</option>
+        </select>
+        <input id="est-busca" placeholder="Buscar SKU ou produto..." oninput="renderEstoque()" style="background:var(--card);border:1px solid var(--bdr);border-radius:var(--rs);color:#fff;padding:7px 11px;font-size:12px;font-family:Sora,sans-serif;outline:none;width:200px">
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px" id="est-metrics"></div>
+    <div style="display:grid;grid-template-columns:70px 1fr 80px 80px 80px 80px 80px;gap:6px;padding:4px 10px;font-size:11px;color:var(--gray);font-weight:500;text-transform:uppercase;margin-bottom:3px">
+      <span>SKU</span><span>Produto</span><span>Saldo Tiny</span><span>Reservado</span><span>Disponivel</span><span>Qtd WMS</span><span>Diferenca</span>
+    </div>
+    <div id="est-body" style="max-height:520px;overflow-y:auto"></div>
   </div>
   <div id="tab-relatorio" style="display:none">
     <div class="rc"><div class="rt">Ocupacao por corredor</div><div id="rres"></div></div>
@@ -385,9 +420,18 @@ var currentUser = null;
 
 function loginGoogle(){
   var provider = new firebase.auth.GoogleAuthProvider();
-  auth.signInWithPopup(provider).catch(function(e){
-    alert('Erro ao fazer login: '+e.message);
-  });
+  // Use redirect on mobile (more reliable), popup on desktop
+  var isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  if(isMobile){
+    auth.signInWithRedirect(provider).catch(function(e){
+      alert('Erro ao fazer login: '+e.message);
+    });
+  } else {
+    auth.signInWithPopup(provider).catch(function(e){
+      // Fallback to redirect if popup blocked
+      auth.signInWithRedirect(provider);
+    });
+  }
 }
 
 function logout(){
@@ -404,6 +448,13 @@ function initAuth(){
 
   if(ldr) ldr.style.display='flex';
   if(loginScreen) loginScreen.style.display='none';
+
+  // Handle redirect result after returning from Google login
+  auth.getRedirectResult().then(function(result){
+    // Redirect result handled by onAuthStateChanged below
+  }).catch(function(e){
+    console.error('Redirect error:', e);
+  });
 
   auth.onAuthStateChanged(function(user){
     if(ldr) ldr.style.display='none';
@@ -1107,23 +1158,225 @@ if(window.innerWidth <= 768){
   if(fab) fab.style.display = 'flex';
 }
 
+// ?? ESTOQUE TINY INTEGRATION ??
+var catalogoTiny = {};
+var ultimaSync = null;
+
+function loadCatalogoTiny(){
+  rtdb.ref('catalogo').once('value', function(snap){
+    var val = snap.val();
+    if(val){
+      catalogoTiny = val;
+      console.log('Catalogo Tiny carregado:', Object.keys(catalogoTiny).length, 'produtos');
+    }
+    rtdb.ref('ultima_sincronizacao').once('value', function(s){
+      ultimaSync = s.val();
+      if(ultimaSync){
+        var d = new Date(ultimaSync);
+        var fmt = d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+        var el = document.getElementById('sync-status');
+        if(el) el.textContent = 'Ultima sincronizacao: ' + fmt + ' (' + Object.keys(catalogoTiny).length + ' produtos)';
+      }
+    });
+    renderEstoque();
+  });
+}
+
+function sanitizeSkuKey(sku){
+  if(!sku) return '';
+  return sku.replace(/[.#$\[\]/ @!%&*+=?<>,;:'"]/g, '_').replace(/^_+|_+$/g,'') || sku;
+}
+
+function getTinyData(sku){
+  // Try original SKU and sanitized version
+  return catalogoTiny[sku] || catalogoTiny[sanitizeSkuKey(sku)] || null;
+}
+
+function getWmsQty(sku){
+  // Sum quantity of this SKU across all paletes
+  var total = 0;
+  Object.values(P).forEach(function(pal){
+    pal.produtos.forEach(function(p){
+      if(p.sku === sku || sanitizeSkuKey(p.sku) === sanitizeSkuKey(sku)){
+        total += (p.qty || 0);
+      }
+    });
+  });
+  return total;
+}
+
+function renderEstoque(){
+  var body = document.getElementById('est-body');
+  var metrics = document.getElementById('est-metrics');
+  if(!body) return;
+
+  var filtro = (document.getElementById('est-filtro')||{value:''}).value;
+  var busca = (document.getElementById('est-busca')||{value:''}).value.toLowerCase();
+
+  if(!Object.keys(catalogoTiny).length){
+    body.innerHTML = '<div class="empty">Dados do Tiny ainda nao carregados. Aguarde a sincronizacao...</div>';
+    return;
+  }
+
+  var items = Object.entries(catalogoTiny).map(function(e){
+    var sku = e[0]; var t = e[1];
+    var wmsQty = getWmsQty(sku);
+    var diff = wmsQty - (t.saldo || 0);
+    return { sku: sku, desc: t.desc||'', saldo: t.saldo||0, reservado: t.reservado||0,
+             disponivel: t.disponivel||0, alerta: t.alerta||false, wmsQty: wmsQty, diff: diff };
+  });
+
+  // Metrics
+  var totalAlerta = items.filter(function(i){return i.alerta;}).length;
+  var totalReserv = items.filter(function(i){return i.reservado > 0;}).length;
+  var totalDiff   = items.filter(function(i){return Math.abs(i.diff) > 0;}).length;
+  if(metrics) metrics.innerHTML =
+    '<div class="mc"><div class="ml">Produtos Tiny</div><div class="mv">' + items.length + '</div></div>' +
+    '<div class="mc"><div class="ml">Alertas estoque</div><div class="mv" style="color:var(--red)">' + totalAlerta + '</div></div>' +
+    '<div class="mc"><div class="ml">Com reservado</div><div class="mv" style="color:var(--amber)">' + totalReserv + '</div></div>' +
+    '<div class="mc"><div class="ml">Dif. WMS x Tiny</div><div class="mv" style="color:var(--amber)">' + totalDiff + '</div></div>';
+
+  // Filter
+  if(filtro === 'alerta') items = items.filter(function(i){return i.alerta;});
+  if(filtro === 'reservado') items = items.filter(function(i){return i.reservado > 0;});
+  if(filtro === 'diff') items = items.filter(function(i){return Math.abs(i.diff) > 0;});
+  if(busca) items = items.filter(function(i){
+    return i.sku.toLowerCase().includes(busca) || i.desc.toLowerCase().includes(busca);
+  });
+
+  // Sort: alerts first, then by sku
+  items.sort(function(a,b){
+    if(a.alerta && !b.alerta) return -1;
+    if(!a.alerta && b.alerta) return 1;
+    return a.sku.localeCompare(b.sku);
+  });
+
+  if(!items.length){ body.innerHTML = '<div class="empty">Nenhum produto encontrado.</div>'; return; }
+
+  body.innerHTML = items.slice(0, 300).map(function(i){
+    var rowCls = i.alerta ? 'est-row alerta' : Math.abs(i.diff) > 0 ? 'est-row diff' : 'est-row';
+    var diffHtml = '';
+    if(i.diff > 0) diffHtml = '<span class="diff-badge" style="background:rgba(245,158,11,.15);color:var(--amber)">+' + i.diff + '</span>';
+    else if(i.diff < 0) diffHtml = '<span class="diff-badge" style="background:rgba(239,68,68,.15);color:var(--red)">' + i.diff + '</span>';
+    else diffHtml = '<span class="diff-badge" style="background:rgba(0,192,127,.1);color:var(--green)">OK</span>';
+    return '<div class="' + rowCls + '">' +
+      '<span class="est-sku">' + i.sku + '</span>' +
+      '<span style="font-size:11px">' + i.desc + '</span>' +
+      '<span class="est-num">' + i.saldo + '</span>' +
+      '<span class="est-num ' + (i.reservado > 0 ? 'est-warn' : '') + '">' + i.reservado + '</span>' +
+      '<span class="est-num ' + (i.alerta ? 'est-alert' : 'est-ok') + '">' + i.disponivel + '</span>' +
+      '<span class="est-num">' + i.wmsQty + '</span>' +
+      '<span style="text-align:center">' + diffHtml + '</span>' +
+    '</div>';
+  }).join('');
+
+  if(items.length > 300){
+    body.innerHTML += '<div class="empty">Mostrando 300 de ' + items.length + '. Use o filtro para refinar.</div>';
+  }
+}
+
+// ?? ENHANCED confirmarProduto - shows Tiny data ??
+function confirmarProduto(sku){
+  sku = (sku||'').trim();
+  if(!sku){ alert('Informe o SKU do produto'); return; }
+
+  var found = null;
+  Object.keys(TINY).forEach(function(addr){
+    TINY[addr].forEach(function(p){
+      if(p.s === sku || p.s.toUpperCase() === sku.toUpperCase()){
+        found = {sku: p.s, desc: p.d, qty: 1};
+      }
+    });
+  });
+
+  if(!found){
+    Object.values(P).forEach(function(pal){
+      pal.produtos.forEach(function(p){
+        if(p.sku === sku || p.sku.toUpperCase() === sku.toUpperCase()){
+          found = {sku: p.sku, desc: p.desc, qty: 1};
+        }
+      });
+    });
+  }
+
+  if(!found){
+    var desc = prompt('Produto "' + sku + '" nao encontrado.
+Digite o nome do produto:');
+    if(!desc) return;
+    found = {sku: sku, desc: desc, qty: 1};
+  }
+
+  // Get Tiny data for this product
+  var tinyData = getTinyData(sku);
+  var wmsQty = getWmsQty(sku);
+
+  if(tinyData){
+    // Show Tiny info in operation screen
+    var infoHtml = '<div class="op-tiny-info">' +
+      '<div style="flex:1;font-size:13px;color:#fff;font-weight:500">' + found.desc + '</div>' +
+      '<div class="op-tiny-col"><div class="op-tiny-label">Saldo Tiny</div><div class="op-tiny-val">' + tinyData.saldo + '</div></div>' +
+      '<div class="op-tiny-col"><div class="op-tiny-label">Reservado</div><div class="op-tiny-val" style="color:var(--amber)">' + tinyData.reservado + '</div></div>' +
+      '<div class="op-tiny-col"><div class="op-tiny-label">Disponivel</div><div class="op-tiny-val" style="color:' + (tinyData.disponivel < 0 ? 'var(--red)' : 'var(--green)') + '">' + tinyData.disponivel + '</div></div>' +
+      '<div class="op-tiny-col"><div class="op-tiny-label">No WMS</div><div class="op-tiny-val" style="color:var(--blue)">' + wmsQty + '</div></div>' +
+    '</div>';
+
+    var diff = wmsQty - tinyData.saldo;
+    if(Math.abs(diff) > 0){
+      infoHtml += '<div class="op-diff-warn">Atencao: WMS tem ' + wmsQty + ' un mas Tiny mostra ' + tinyData.saldo + ' un (diferenca: ' + (diff > 0 ? '+' : '') + diff + ')</div>';
+    }
+
+    // Insert info before the add form
+    var addForm = document.querySelector('.addform');
+    if(addForm){
+      var existing = document.getElementById('tiny-info-banner');
+      if(existing) existing.remove();
+      var div = document.createElement('div');
+      div.id = 'tiny-info-banner';
+      div.innerHTML = infoHtml;
+      addForm.parentNode.insertBefore(div, addForm);
+    }
+  }
+
+  var existing = opState.produtos.find(function(p){ return p.sku === found.sku; });
+  if(existing){ existing.qty += 1; }
+  else { opState.produtos.push(found); }
+  renderOpStep();
+
+  setTimeout(function(){
+    var inputs = document.querySelectorAll('.op-qty-input');
+    if(inputs.length > 0) inputs[inputs.length-1].focus();
+  }, 100);
+}
+
 // Override showTab to handle new tabs
 var _origShowTab = showTab;
 window.showTab = function(name){
-  if(name === 'operacao' || name === 'qrcodes'){
-    ['mapa','lista','buscar','importar','relatorio','operacao','qrcodes'].forEach(function(t){
+  var allTabs = ['mapa','lista','buscar','importar','relatorio','operacao','qrcodes','estoque'];
+  if(name === 'operacao' || name === 'qrcodes' || name === 'estoque'){
+    allTabs.forEach(function(t){
       var el = document.getElementById('tab-'+t);
       if(el) el.style.display = t===name?'block':'none';
     });
     document.querySelectorAll('.tab').forEach(function(b,i){
-      b.classList.toggle('active', ['mapa','lista','buscar','importar','relatorio','operacao'][i]===name);
+      b.classList.toggle('active', ['mapa','lista','buscar','importar','relatorio','operacao','estoque'][i]===name);
     });
+    if(name === 'estoque'){
+      if(!Object.keys(catalogoTiny).length) loadCatalogoTiny();
+      else renderEstoque();
+    }
     return;
   }
   _origShowTab(name);
-  ['operacao','qrcodes'].forEach(function(t){
+  ['operacao','qrcodes','estoque'].forEach(function(t){
     var el = document.getElementById('tab-'+t);
     if(el) el.style.display='none';
   });
+};
+
+// Load Tiny catalog when user logs in
+var _origLoad = load;
+load = function(){
+  _origLoad();
+  loadCatalogoTiny();
 };
 </script>
