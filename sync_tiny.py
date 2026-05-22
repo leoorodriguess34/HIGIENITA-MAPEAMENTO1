@@ -128,17 +128,16 @@ def buscar_estoque(produto_id):
     }
 
 def buscar_pedidos_abertos():
-    """Busca pedidos em aberto"""
+    """Busca pedidos em aberto com itens de cada pedido"""
     pedidos = []
     pagina = 1
-    while pagina <= 3:  # Limita a 3 paginas para nao estourar rate limit
+    while pagina <= 5:
         print(f'Buscando pedidos - pagina {pagina}...')
         data = tiny_get('pedidos.pesquisa.php', {
             'situacao': 'aberto',
             'pagina': pagina
         })
         time.sleep(DELAY_ENTRE_CHAMADAS)
-        
         if not data:
             break
         items = data.get('pedidos', [])
@@ -152,14 +151,47 @@ def buscar_pedidos_abertos():
                 'cliente':  p.get('nome_contato', ''),
                 'valor':    float(p.get('valor', 0) or 0),
                 'data':     p.get('data_pedido', ''),
+                'id':       str(p.get('id', '')),
             })
         num_paginas = int(data.get('numero_paginas', 1))
         if pagina >= num_paginas:
             break
         pagina += 1
-    
-    print(f'Total pedidos abertos: {len(pedidos)}')
-    return pedidos
+
+    print(f'Total pedidos encontrados: {len(pedidos)}')
+
+    # Busca itens de cada pedido (com delay para nao estourar rate limit)
+    print('Buscando itens dos pedidos...')
+    pedidos_com_itens = []
+    for i, ped in enumerate(pedidos):
+        if not ped['id']:
+            pedidos_com_itens.append(ped)
+            continue
+        detail = tiny_get('pedido.obter.php', {'id': ped['id']})
+        time.sleep(DELAY_ENTRE_CHAMADAS)
+        if detail:
+            pedido_det = detail.get('pedido', {})
+            itens_raw = pedido_det.get('itens', [])
+            itens = []
+            for it in itens_raw:
+                item_d = it.get('item', {})
+                itens.append({
+                    'sku':    str(item_d.get('codigo', '')),
+                    'desc':   str(item_d.get('descricao', ''))[:60],
+                    'qtd':    float(item_d.get('quantidade', 0) or 0),
+                    'un':     str(item_d.get('unidade', 'UN')),
+                    'valor':  float(item_d.get('valor_unitario', 0) or 0),
+                })
+            ped['itens'] = itens
+        else:
+            ped['itens'] = []
+        pedidos_com_itens.append(ped)
+        if (i+1) % 20 == 0:
+            print(f'  Itens: {i+1}/{len(pedidos)} pedidos processados...')
+            time.sleep(10)
+
+    print(f'Total pedidos com itens: {len(pedidos_com_itens)}')
+    return pedidos_com_itens
 
 def sincronizar():
     import datetime
