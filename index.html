@@ -169,15 +169,27 @@ body{font-family:'Sora',sans-serif;background:var(--navy);color:#fff;min-height:
 .op-del{background:none;border:none;color:#EF4444;cursor:pointer;font-size:16px;padding:4px}
 .op-fab{position:fixed;bottom:24px;right:20px;width:56px;height:56px;border-radius:50%;background:#00C07F;color:#0B1F3A;border:none;font-size:24px;cursor:pointer;box-shadow:0 4px 16px rgba(0,192,127,.4);z-index:200;display:flex;align-items:center;justify-content:center}
 .op-fab:hover{background:#009960}
-.est-row{display:grid;grid-template-columns:70px 1fr 80px 80px 80px 80px 80px;gap:6px;align-items:center;padding:8px 10px;background:var(--card);border:1px solid var(--bdr);border-radius:var(--rs);margin-bottom:3px;font-size:12px}
-.est-row.alerta{border-color:rgba(239,68,68,.4);background:rgba(239,68,68,.05)}
-.est-row.diff{border-color:rgba(245,158,11,.4);background:rgba(245,158,11,.05)}
+.est-row{display:grid;grid-template-columns:90px 1fr 70px 70px 80px 80px 80px 70px 80px;gap:0;align-items:center;padding:10px 14px;font-size:12px;border-bottom:1px solid var(--bdr);transition:background .1s;cursor:pointer}
+.est-row:hover{background:rgba(255,255,255,.03)}
+.est-row:last-child{border-bottom:none}
+.est-row.alerta{background:rgba(239,68,68,.04)}
+.est-row.alerta:hover{background:rgba(239,68,68,.08)}
+.est-row.reservado-row{background:rgba(245,158,11,.03)}
+.est-row.diff-row{background:rgba(59,130,246,.03)}
 .est-sku{font-family:'DM Mono',monospace;font-weight:600;color:var(--green);font-size:11px}
-.est-num{font-family:'DM Mono',monospace;text-align:right}
-.est-alert{color:var(--red);font-weight:600}
+.est-num{font-family:'DM Mono',monospace;text-align:right;font-size:12px}
+.est-alert{color:var(--red);font-weight:700}
 .est-warn{color:var(--amber);font-weight:600}
 .est-ok{color:var(--green)}
-.diff-badge{font-size:10px;padding:2px 7px;border-radius:20px;font-family:'DM Mono',monospace;text-align:center}
+.diff-badge{font-size:10px;padding:2px 8px;border-radius:20px;font-family:'DM Mono',monospace;display:inline-block}
+/* Product detail panel */
+.est-detail{background:var(--navy);border:1px solid var(--bdr);border-radius:var(--r);padding:20px;margin-bottom:12px;display:none}
+.est-detail.active{display:block}
+.est-detail-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+.est-detail-card{background:var(--card);border:1px solid var(--bdr);border-radius:var(--rs);padding:12px;text-align:center}
+.est-detail-label{font-size:10px;color:var(--gray);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px}
+.est-detail-val{font-size:22px;font-weight:700;font-family:'DM Mono',monospace}
+.est-loc-badge{display:inline-block;background:rgba(0,192,127,.1);border:1px solid rgba(0,192,127,.3);border-radius:var(--rs);padding:3px 10px;font-size:12px;font-family:'DM Mono',monospace;color:var(--green);margin:3px}
 /* Op comparison */
 .op-tiny-info{background:rgba(0,192,127,.06);border:1px solid rgba(0,192,127,.2);border-radius:var(--rs);padding:10px 12px;margin-bottom:6px;display:flex;gap:12px;flex-wrap:wrap;align-items:center}
 .op-tiny-col{text-align:center;min-width:70px}
@@ -318,23 +330,40 @@ body{font-family:'Sora',sans-serif;background:var(--navy);color:#fff;min-height:
     <div id="qr-grid" class="qr-print-grid"></div>
   </div>
   <div id="tab-estoque" style="display:none">
-    <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
-      <div id="sync-status" style="font-size:12px;color:var(--gray)">Carregando dados do Tiny...</div>
-      <div style="margin-left:auto;display:flex;gap:8px">
-        <select id="est-filtro" onchange="renderEstoque()" style="background:var(--card);border:1px solid var(--bdr);border-radius:var(--rs);color:#fff;padding:7px 11px;font-size:12px;font-family:Sora,sans-serif;outline:none">
-          <option value="">Todos os produtos</option>
-          <option value="alerta">Apenas alertas</option>
-          <option value="reservado">Com reservado > 0</option>
-          <option value="diff">Diferenca WMS x Tiny</option>
+    <!-- Top bar -->
+    <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
+      <div id="sync-status" style="font-size:12px;color:var(--gray);display:flex;align-items:center;gap:6px">
+        <span style="width:7px;height:7px;border-radius:50%;background:var(--green);display:inline-block"></span>
+        Carregando...
+      </div>
+      <div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">
+        <div style="display:flex;gap:2px;background:var(--mid);border-radius:var(--rs);padding:2px">
+          <button onclick="setEstView('todos')" id="ev-todos" class="btn" style="padding:5px 12px;font-size:12px;border-radius:4px;background:var(--green);color:var(--navy)">Todos</button>
+          <button onclick="setEstView('alertas')" id="ev-alertas" class="btn" style="padding:5px 12px;font-size:12px;border-radius:4px;background:transparent;color:var(--gray)">Alertas</button>
+          <button onclick="setEstView('reservado')" id="ev-reservado" class="btn" style="padding:5px 12px;font-size:12px;border-radius:4px;background:transparent;color:var(--gray)">Reservados</button>
+          <button onclick="setEstView('diff')" id="ev-diff" class="btn" style="padding:5px 12px;font-size:12px;border-radius:4px;background:transparent;color:var(--gray)">Dif. WMS</button>
+          <button onclick="setEstView('zerado')" id="ev-zerado" class="btn" style="padding:5px 12px;font-size:12px;border-radius:4px;background:transparent;color:var(--gray)">Zerados</button>
+        </div>
+        <input id="est-busca" placeholder="Buscar SKU ou produto..." oninput="renderEstoque()" style="background:var(--card);border:1px solid var(--bdr);border-radius:var(--rs);color:#fff;padding:7px 12px;font-size:12px;font-family:Sora,sans-serif;outline:none;width:220px">
+        <select id="est-sort" onchange="renderEstoque()" style="background:var(--card);border:1px solid var(--bdr);border-radius:var(--rs);color:#fff;padding:7px 11px;font-size:12px;font-family:Sora,sans-serif;outline:none">
+          <option value="sku">Ordenar: SKU</option>
+          <option value="desc">Ordenar: Nome</option>
+          <option value="saldo">Ordenar: Saldo</option>
+          <option value="reservado">Ordenar: Reservado</option>
+          <option value="diff">Ordenar: Diferenca</option>
         </select>
-        <input id="est-busca" placeholder="Buscar SKU ou produto..." oninput="renderEstoque()" style="background:var(--card);border:1px solid var(--bdr);border-radius:var(--rs);color:#fff;padding:7px 11px;font-size:12px;font-family:Sora,sans-serif;outline:none;width:200px">
       </div>
     </div>
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px" id="est-metrics"></div>
-    <div style="display:grid;grid-template-columns:70px 1fr 80px 80px 80px 80px 80px;gap:6px;padding:4px 10px;font-size:11px;color:var(--gray);font-weight:500;text-transform:uppercase;margin-bottom:3px">
-      <span>SKU</span><span>Produto</span><span>Saldo Tiny</span><span>Reservado</span><span>Disponivel</span><span>Qtd WMS</span><span>Diferenca</span>
+    <!-- Metrics cards -->
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:16px" id="est-metrics"></div>
+    <!-- Table -->
+    <div style="background:var(--card);border:1px solid var(--bdr);border-radius:var(--r);overflow:hidden">
+      <div style="display:grid;grid-template-columns:90px 1fr 70px 70px 80px 80px 80px 70px 80px;gap:0;background:var(--mid);padding:10px 14px;font-size:11px;color:var(--gray);font-weight:600;text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid var(--bdr)">
+        <span>SKU</span><span>Produto</span><span>UN</span><span>Preco</span><span>Saldo</span><span>Reservado</span><span>Disponivel</span><span>WMS</span><span>Diferenca</span>
+      </div>
+      <div id="est-body" style="max-height:560px;overflow-y:auto"></div>
     </div>
-    <div id="est-body" style="max-height:520px;overflow-y:auto"></div>
+    <div id="est-footer" style="font-size:12px;color:var(--gray);margin-top:8px;text-align:right"></div>
   </div>
   <div id="tab-relatorio" style="display:none">
     <div class="rc"><div class="rt">Ocupacao por corredor</div><div id="rres"></div></div>
@@ -1175,74 +1204,172 @@ function getWmsQty(sku){
   return total;
 }
 
+var estView = 'todos';
+
+function setEstView(v){
+  estView = v;
+  ['todos','alertas','reservado','diff','zerado'].forEach(function(x){
+    var btn = document.getElementById('ev-'+x);
+    if(btn){
+      btn.style.background = x===v ? 'var(--green)' : 'transparent';
+      btn.style.color = x===v ? 'var(--navy)' : 'var(--gray)';
+    }
+  });
+  renderEstoque();
+}
+
 function renderEstoque(){
   var body = document.getElementById('est-body');
   var metrics = document.getElementById('est-metrics');
+  var footer = document.getElementById('est-footer');
   if(!body) return;
 
-  var filtro = (document.getElementById('est-filtro')||{value:''}).value;
   var busca = (document.getElementById('est-busca')||{value:''}).value.toLowerCase();
+  var sortBy = (document.getElementById('est-sort')||{value:'sku'}).value;
 
   if(!Object.keys(catalogoTiny).length){
-    body.innerHTML = '<div class="empty">Dados do Tiny ainda nao carregados. Aguarde a sincronizacao...</div>';
+    body.innerHTML = '<div class="empty" style="padding:40px">Dados do Tiny ainda nao carregados...</div>';
     return;
   }
 
   var items = Object.entries(catalogoTiny).map(function(e){
-    var sku = e[0]; var t = e[1];
-    var wmsQty = getWmsQty(sku);
+    var k = e[0]; var t = e[1];
+    var wmsQty = getWmsQty(t.sku || k);
     var diff = wmsQty - (t.saldo || 0);
-    return { sku: sku, desc: t.desc||'', saldo: t.saldo||0, reservado: t.reservado||0,
-             disponivel: t.disponivel||0, alerta: t.alerta||false, wmsQty: wmsQty, diff: diff };
+    return {
+      sku: t.sku || k, desc: t.desc||'', un: t.un||'UN',
+      preco: t.preco||0, saldo: t.saldo||0, reservado: t.reservado||0,
+      disponivel: t.disponivel||0, alerta: t.alerta||false,
+      loc: t.loc||'', wmsQty: wmsQty, diff: diff
+    };
   });
 
   // Metrics
-  var totalAlerta = items.filter(function(i){return i.alerta;}).length;
-  var totalReserv = items.filter(function(i){return i.reservado > 0;}).length;
-  var totalDiff   = items.filter(function(i){return Math.abs(i.diff) > 0;}).length;
+  var totalAlerta  = items.filter(function(i){return i.alerta;}).length;
+  var totalReserv  = items.filter(function(i){return i.reservado > 0;}).length;
+  var totalDiff    = items.filter(function(i){return Math.abs(i.diff) > 0;}).length;
+  var totalZerado  = items.filter(function(i){return i.saldo <= 0;}).length;
+  var valorTotal   = items.reduce(function(a,i){return a + (i.saldo * i.preco);}, 0);
+
   if(metrics) metrics.innerHTML =
-    '<div class="mc"><div class="ml">Produtos Tiny</div><div class="mv">' + items.length + '</div></div>' +
-    '<div class="mc"><div class="ml">Alertas estoque</div><div class="mv" style="color:var(--red)">' + totalAlerta + '</div></div>' +
-    '<div class="mc"><div class="ml">Com reservado</div><div class="mv" style="color:var(--amber)">' + totalReserv + '</div></div>' +
-    '<div class="mc"><div class="ml">Dif. WMS x Tiny</div><div class="mv" style="color:var(--amber)">' + totalDiff + '</div></div>';
+    '<div class="mc"><div class="ml">Total produtos</div><div class="mv">' + items.length + '</div></div>' +
+    '<div class="mc"><div class="ml">Alertas criticos</div><div class="mv est-alert">' + totalAlerta + '</div></div>' +
+    '<div class="mc"><div class="ml">Com reservado</div><div class="mv est-warn">' + totalReserv + '</div></div>' +
+    '<div class="mc"><div class="ml">Dif. WMS x Tiny</div><div class="mv" style="color:var(--blue)">' + totalDiff + '</div></div>' +
+    '<div class="mc"><div class="ml">Valor em estoque</div><div class="mv" style="font-size:16px;color:var(--green)">R$' + valorTotal.toLocaleString('pt-BR',{minimumFractionDigits:0,maximumFractionDigits:0}) + '</div></div>';
 
-  // Filter
-  if(filtro === 'alerta') items = items.filter(function(i){return i.alerta;});
-  if(filtro === 'reservado') items = items.filter(function(i){return i.reservado > 0;});
-  if(filtro === 'diff') items = items.filter(function(i){return Math.abs(i.diff) > 0;});
-  if(busca) items = items.filter(function(i){
-    return i.sku.toLowerCase().includes(busca) || i.desc.toLowerCase().includes(busca);
+  // Filter by view
+  var filtered = items.slice();
+  if(estView === 'alertas') filtered = filtered.filter(function(i){return i.alerta;});
+  if(estView === 'reservado') filtered = filtered.filter(function(i){return i.reservado > 0;});
+  if(estView === 'diff') filtered = filtered.filter(function(i){return Math.abs(i.diff) > 0;});
+  if(estView === 'zerado') filtered = filtered.filter(function(i){return i.saldo <= 0;});
+  if(busca) filtered = filtered.filter(function(i){
+    return i.sku.toLowerCase().includes(busca) || i.desc.toLowerCase().includes(busca) || (i.loc||'').toLowerCase().includes(busca);
   });
 
-  // Sort: alerts first, then by sku
-  items.sort(function(a,b){
-    if(a.alerta && !b.alerta) return -1;
-    if(!a.alerta && b.alerta) return 1;
-    return a.sku.localeCompare(b.sku);
+  // Sort
+  filtered.sort(function(a,b){
+    if(sortBy==='sku') return a.sku.localeCompare(b.sku);
+    if(sortBy==='desc') return a.desc.localeCompare(b.desc);
+    if(sortBy==='saldo') return b.saldo - a.saldo;
+    if(sortBy==='reservado') return b.reservado - a.reservado;
+    if(sortBy==='diff') return Math.abs(b.diff) - Math.abs(a.diff);
+    return 0;
   });
 
-  if(!items.length){ body.innerHTML = '<div class="empty">Nenhum produto encontrado.</div>'; return; }
+  if(!filtered.length){
+    body.innerHTML = '<div class="empty" style="padding:40px">Nenhum produto encontrado.</div>';
+    return;
+  }
 
-  body.innerHTML = items.slice(0, 300).map(function(i){
-    var rowCls = i.alerta ? 'est-row alerta' : Math.abs(i.diff) > 0 ? 'est-row diff' : 'est-row';
-    var diffHtml = '';
+  var show = filtered.slice(0, 500);
+  body.innerHTML = show.map(function(i){
+    var rowCls = 'est-row';
+    if(i.alerta) rowCls += ' alerta';
+    else if(i.reservado > 0) rowCls += ' reservado-row';
+    else if(Math.abs(i.diff) > 0) rowCls += ' diff-row';
+
+    var dispCls = i.alerta ? 'est-alert' : i.disponivel === 0 ? 'est-warn' : 'est-ok';
+    var resCls = i.reservado > 0 ? 'est-warn' : '';
+
+    var diffHtml;
     if(i.diff > 0) diffHtml = '<span class="diff-badge" style="background:rgba(245,158,11,.15);color:var(--amber)">+' + i.diff + '</span>';
     else if(i.diff < 0) diffHtml = '<span class="diff-badge" style="background:rgba(239,68,68,.15);color:var(--red)">' + i.diff + '</span>';
     else diffHtml = '<span class="diff-badge" style="background:rgba(0,192,127,.1);color:var(--green)">OK</span>';
-    return '<div class="' + rowCls + '">' +
-      '<span class="est-sku">' + i.sku + '</span>' +
-      '<span style="font-size:11px">' + i.desc + '</span>' +
+
+    var alertIcon = i.alerta ? '<span style="color:var(--red);font-size:10px;margin-right:4px">!</span>' : '';
+
+    return '<div class="' + rowCls + '" onclick="showEstDetalhe('' + i.sku + '')">' +
+      '<span class="est-sku">' + alertIcon + i.sku + '</span>' +
+      '<span style="font-size:11px;color:#fff">' + i.desc + '</span>' +
+      '<span class="est-num" style="color:var(--gray)">' + i.un + '</span>' +
+      '<span class="est-num" style="color:var(--gray)">R$' + (i.preco||0).toFixed(2).replace('.',',') + '</span>' +
       '<span class="est-num">' + i.saldo + '</span>' +
-      '<span class="est-num ' + (i.reservado > 0 ? 'est-warn' : '') + '">' + i.reservado + '</span>' +
-      '<span class="est-num ' + (i.alerta ? 'est-alert' : 'est-ok') + '">' + i.disponivel + '</span>' +
-      '<span class="est-num">' + i.wmsQty + '</span>' +
+      '<span class="est-num ' + resCls + '">' + i.reservado + '</span>' +
+      '<span class="est-num ' + dispCls + '">' + i.disponivel + '</span>' +
+      '<span class="est-num" style="color:var(--blue)">' + i.wmsQty + '</span>' +
       '<span style="text-align:center">' + diffHtml + '</span>' +
     '</div>';
   }).join('');
 
-  if(items.length > 300){
-    body.innerHTML += '<div class="empty">Mostrando 300 de ' + items.length + '. Use o filtro para refinar.</div>';
-  }
+  if(footer) footer.textContent = 'Mostrando ' + show.length + ' de ' + filtered.length + ' produtos';
+}
+
+function showEstDetalhe(sku){
+  // Find item
+  var item = null;
+  Object.entries(catalogoTiny).forEach(function(e){
+    if((e[1].sku||e[0]) === sku) item = e[1];
+  });
+  if(!item) return;
+
+  var wmsQty = getWmsQty(sku);
+  var diff = wmsQty - (item.saldo||0);
+
+  // Find paletes where this product is
+  var pals = [];
+  Object.values(P).forEach(function(pal){
+    pal.produtos.forEach(function(p){
+      if(p.sku === sku) pals.push({addr: pal.addr, qty: p.qty});
+    });
+  });
+
+  var palHtml = pals.length ? pals.map(function(p){
+    return '<span class="est-loc-badge">' + p.addr + ' (' + p.qty + 'un)</span>';
+  }).join('') : '<span style="color:var(--gray);font-size:12px">Nao localizado no WMS</span>';
+
+  var diffColor = diff > 0 ? 'var(--amber)' : diff < 0 ? 'var(--red)' : 'var(--green)';
+  var diffStr = diff > 0 ? '+'+diff : ''+diff;
+
+  var panel = '<div style="background:var(--mid);border-radius:var(--r);padding:16px;margin:0 0 6px">' +
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">' +
+      '<div>' +
+        '<div style="font-size:11px;color:var(--green);font-family:DM Mono,monospace;font-weight:600">' + sku + '</div>' +
+        '<div style="font-size:15px;font-weight:600;color:#fff">' + (item.desc||'') + '</div>' +
+        '<div style="font-size:12px;color:var(--gray);margin-top:2px">UN: ' + (item.un||'UN') + ' | Preco: R$' + (item.preco||0).toFixed(2).replace('.',',') + ' | Localizacao Tiny: ' + (item.loc||'--') + '</div>' +
+      '</div>' +
+      '<button onclick="this.parentNode.parentNode.parentNode.removeChild(this.parentNode.parentNode)" style="background:none;border:none;color:var(--gray);font-size:18px;cursor:pointer">X</button>' +
+    '</div>' +
+    '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:12px">' +
+      '<div class="mc"><div class="ml">Saldo Tiny</div><div class="mv">' + (item.saldo||0) + '</div></div>' +
+      '<div class="mc"><div class="ml">Reservado</div><div class="mv est-warn">' + (item.reservado||0) + '</div></div>' +
+      '<div class="mc"><div class="ml">Disponivel</div><div class="mv ' + (item.alerta?'est-alert':'est-ok') + '">' + (item.disponivel||0) + '</div></div>' +
+      '<div class="mc"><div class="ml">No WMS</div><div class="mv" style="color:var(--blue)">' + wmsQty + '</div></div>' +
+      '<div class="mc"><div class="ml">Diferenca</div><div class="mv" style="color:' + diffColor + '">' + diffStr + '</div></div>' +
+    '</div>' +
+    '<div style="font-size:12px;color:var(--gray);margin-bottom:6px">Paletes no WMS:</div>' +
+    '<div>' + palHtml + '</div>' +
+  '</div>';
+
+  // Insert before the table
+  var table = document.querySelector('#tab-estoque > div:last-of-type');
+  var existing = document.getElementById('est-detalhe-panel');
+  if(existing) existing.remove();
+  var div = document.createElement('div');
+  div.id = 'est-detalhe-panel';
+  div.innerHTML = panel;
+  if(table) table.parentNode.insertBefore(div, table);
 }
 
 // ?? ENHANCED confirmarProduto - shows Tiny data ??
