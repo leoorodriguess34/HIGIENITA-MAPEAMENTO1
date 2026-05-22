@@ -1858,18 +1858,62 @@ function renderSeparacao(){
     filtered.sort(function(a,b){return (b.ts||0)-(a.ts||0);});
     lista.innerHTML = filtered.map(function(p){
       var statusColor = p.status==='pendente'?'var(--amber)':p.status==='em_separacao'?'var(--blue)':'var(--green)';
+      var itens = p.itens||[];
+      var bipados = p.bipados||{};
+
+      // Items table
+      var itensHtml = '';
+      if(itens.length){
+        var itensDone = itens.filter(function(it,i){return (bipados[i]||0)>=it.qtd;}).length;
+        itensHtml = '<div style="margin-top:10px;border-top:1px solid var(--bdr);padding-top:10px">' +
+          '<div style="font-size:11px;color:var(--gray);margin-bottom:6px">ITENS: '+itensDone+'/'+itens.length+' conferidos</div>' +
+          '<div style="display:grid;grid-template-columns:90px 1fr 60px 60px 60px;font-size:11px;color:var(--gray);padding:5px 8px;background:var(--mid);border-radius:4px 4px 0 0">' +
+            '<span>SKU</span><span>Produto</span><span style="text-align:center">Pedido</span><span style="text-align:center">Bipado</span><span></span>' +
+          '</div>' +
+          itens.map(function(it,i){
+            var bip = bipados[i]||0;
+            var ok = bip>=it.qtd;
+            var parc = bip>0&&bip<it.qtd;
+            var bg = ok?'rgba(0,192,127,.06)':parc?'rgba(245,158,11,.06)':'transparent';
+            var qc = ok?'var(--green)':parc?'var(--amber)':'#fff';
+            var btn = p.status==='em_separacao' ?
+              '<button onclick="biparItemSep(''+p.numero+'','+i+','+it.qtd+')" style="background:none;border:1px solid rgba(0,192,127,.4);border-radius:4px;color:var(--green);font-size:10px;padding:2px 6px;cursor:pointer">'+(ok?'OK':'bipar')+'</button>' : '';
+            return '<div style="display:grid;grid-template-columns:90px 1fr 60px 60px 60px;padding:7px 8px;border-bottom:1px solid var(--bdr);font-size:12px;background:'+bg+'">' +
+              '<span style="font-family:DM Mono,monospace;color:var(--green);font-size:11px">'+it.sku+'</span>' +
+              '<span style="color:#fff">'+it.desc+'</span>' +
+              '<span style="font-family:DM Mono,monospace;text-align:center">'+it.qtd+'</span>' +
+              '<span style="font-family:DM Mono,monospace;text-align:center;color:'+qc+'">'+bip+'</span>' +
+              '<span style="text-align:center">'+btn+'</span>' +
+            '</div>';
+          }).join('') +
+        '</div>';
+      } else {
+        itensHtml = '<div style="margin-top:8px;font-size:12px;color:var(--gray)">Rode o sync do Tiny para carregar os itens deste pedido.</div>';
+      }
+
       var actions = '';
-      if(p.status==='pendente') actions='<button class="btn bp" onclick="iniciarSeparacao(\''+p.numero+'\')" style="padding:5px 12px;font-size:12px">Iniciar separacao</button>';
-      else if(p.status==='em_separacao') actions='<button class="btn" style="padding:5px 12px;font-size:12px;background:var(--green);color:var(--navy)" onclick="concluirSeparacao(\''+p.numero+'\')">Concluir</button>';
-      return '<div style="background:var(--card);border:1px solid var(--bdr);border-radius:var(--rs);padding:12px 14px;margin-bottom:6px;display:flex;align-items:center;gap:12px">'+
-        '<div style="flex:1">'+
-          '<div style="font-size:13px;font-weight:600;color:#fff">Pedido #'+p.numero+'<span style="font-size:11px;font-weight:400;color:'+statusColor+';margin-left:8px">'+p.status+'</span></div>'+
-          '<div style="font-size:12px;color:var(--gray)">'+p.cliente+(p.valor?' | R$'+p.valor.toFixed(2).replace('.',','):'')+'</div>'+
-          (p.data?'<div style="font-size:11px;color:var(--gray)">Data: '+p.data+'</div>':'')+
-        '</div>'+
-        actions+
+      if(p.status==='pendente'){
+        actions = '<button class="btn bp" onclick="iniciarSeparacao(''+p.numero+'')" style="padding:6px 14px;font-size:12px;white-space:nowrap">Iniciar separacao</button>';
+      } else if(p.status==='em_separacao'){
+        actions = '<div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">' +
+          '<button class="btn" style="padding:6px 14px;font-size:12px;background:var(--green);color:var(--navy);white-space:nowrap" onclick="concluirSeparacao(''+p.numero+'')">Concluir pedido</button>' +
+          '<button class="btn bs" style="padding:4px 10px;font-size:11px;white-space:nowrap" onclick="abrirBipSep(''+p.numero+'')">Bipar produto</button>' +
+        '</div>';
+      }
+
+      return '<div style="background:var(--card);border:1px solid var(--bdr);border-radius:var(--r);padding:14px 16px;margin-bottom:8px">' +
+        '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:4px">' +
+          '<div style="flex:1">' +
+            '<div style="font-size:14px;font-weight:600;color:#fff">Pedido #'+p.numero +
+              '<span style="font-size:11px;font-weight:400;color:'+statusColor+';margin-left:10px;padding:2px 8px;border-radius:20px;border:1px solid '+statusColor+'">'+p.status+'</span>' +
+            '</div>' +
+            '<div style="font-size:12px;color:var(--gray)">'+p.cliente+(p.valor?' | R$ '+Number(p.valor).toFixed(2).replace('.',','):'')+(p.data?' | '+p.data:'')+'</div>' +
+          '</div>' +
+          actions +
+        '</div>' +
+        itensHtml +
       '</div>';
-    }).join('');
+    }).join('');;
   });
 }
 
@@ -2108,6 +2152,47 @@ function gerarMsgWhatsApp(){
 }
 
 // 
+// SEPARACAO - BIPAGEM DE ITENS
+function abrirBipSep(numPedido){
+  openScan('produto');
+  scanCallback = function(sku){
+    closeScan();
+    biparItemSepPorSku(numPedido, sku);
+  };
+}
+
+function biparItemSepPorSku(numPedido, sku){
+  rtdb.ref('pedidos/'+numPedido).once('value', function(snap){
+    if(!snap.exists()) return;
+    var ped = snap.val();
+    var itens = ped.itens||[];
+    var bipados = ped.bipados||{};
+    // Find item by SKU
+    var idx = itens.findIndex(function(it){ return it.sku===sku||it.sku.toUpperCase()===sku.toUpperCase(); });
+    if(idx<0){ toast('SKU '+sku+' nao encontrado neste pedido', false); return; }
+    bipados[idx] = (bipados[idx]||0) + 1;
+    rtdb.ref('pedidos/'+numPedido+'/bipados').set(bipados).then(function(){
+      var it = itens[idx];
+      var bipado = bipados[idx];
+      if(bipado>=it.qtd) toast('Item '+sku+' completo! ('+bipado+'/'+it.qtd+')', true);
+      else toast('Bipado '+bipado+'/'+it.qtd+' de '+sku, true);
+      renderSeparacao();
+    });
+  });
+}
+
+function biparItemSep(numPedido, idx, qtdTotal){
+  var qtd = prompt('Quantidade bipada do item (total esperado: '+qtdTotal+'):');
+  if(!qtd) return;
+  var n = parseInt(qtd);
+  if(isNaN(n)||n<0) return;
+  rtdb.ref('pedidos/'+numPedido+'/bipados/'+idx).set(n).then(function(){
+    if(n>=qtdTotal) toast('Item concluido!', true);
+    else toast('Bipado '+n+'/'+qtdTotal, true);
+    renderSeparacao();
+  });
+}
+
 // EXTEND showTab for new modules
 // 
 var _origShowTab2 = window.showTab;
