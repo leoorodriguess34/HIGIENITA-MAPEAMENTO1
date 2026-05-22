@@ -1300,7 +1300,7 @@ function renderEstoque(){
 
     var alertIcon = i.alerta ? '<span style="color:var(--red);font-size:10px;margin-right:4px">!</span>' : '';
 
-    return '<div class="' + rowCls + '" onclick="showEstDetalhe('' + i.sku + '')">' +
+    return '<div class="' + rowCls + '" data-estsku="" + i.sku + "">' +
       '<span class="est-sku">' + alertIcon + i.sku + '</span>' +
       '<span style="font-size:11px;color:#fff">' + i.desc + '</span>' +
       '<span class="est-num" style="color:var(--gray)">' + i.un + '</span>' +
@@ -1314,6 +1314,14 @@ function renderEstoque(){
   }).join('');
 
   if(footer) footer.textContent = 'Mostrando ' + show.length + ' de ' + filtered.length + ' produtos';
+  // Add click handlers via event delegation
+  var estBody = document.getElementById('est-body');
+  if(estBody){
+    estBody.onclick = function(e){
+      var row = e.target.closest('[data-estsku]');
+      if(row) showEstDetalhe(row.getAttribute('data-estsku'));
+    };
+  }
 }
 
 function showEstDetalhe(sku){
