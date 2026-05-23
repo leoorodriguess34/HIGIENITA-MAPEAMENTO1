@@ -584,7 +584,7 @@ body{font-family:'Sora',sans-serif;background:var(--navy);color:#fff;min-height:
     <div class="scan-hint" id="scan-hint">Aponte a camera para o QR Code</div>
   </div>
   <div class="scan-manual">
-    <input id="scan-input" placeholder="Ou digite o codigo manualmente..." onkeydown="if(event.key==='Enter')scanManual()">
+    <input id="scan-input" placeholder="Ou digite o codigo manualmente..." onkeydown="if(event.key==='Enter'&&scanCallback)scanManual()">
   </div>
 </div>
 
@@ -1280,7 +1280,9 @@ function tickScan(){
 
 function scanManual(){
   var val = document.getElementById('scan-input').value.trim();
-  if(val && scanCallback){ closeScan(); scanCallback(val); }
+  if(!val) return;
+  if(scanCallback){ closeScan(); scanCallback(val); }
+  else { closeScan(); toast('Use o botao de bipar para iniciar uma operacao', false); }
 }
 
 function closeScan(){
@@ -1809,10 +1811,21 @@ function novosPedidosTiny(){
     pedidos.forEach(function(p, i){
       var num = p.numero || p.id || ('IMP'+i);
       var key = 'pedidos/'+num;
+      // Include itens if available from sync
+      var itens = p.itens || [];
+      // Also check if itens came as object (Firebase stores arrays as objects)
+      if(itens && !Array.isArray(itens)){
+        itens = Object.values(itens);
+      }
       updates[key] = {
-        numero: num, cliente: p.cliente||p.nome_contato||'', valor: p.valor||0,
-        data: p.data||p.data_pedido||'', status: 'pendente', origem: 'tiny',
-        ts: Date.now(), itens: p.itens||[]
+        numero: num,
+        cliente: p.cliente||p.nome_contato||'',
+        valor: p.valor||0,
+        data: p.data||p.data_pedido||'',
+        status: 'pendente',
+        origem: 'tiny',
+        ts: Date.now(),
+        itens: itens
       };
       count++;
     });
@@ -1859,6 +1872,8 @@ function renderSeparacao(){
     lista.innerHTML = filtered.map(function(p){
       var statusColor = p.status==='pendente'?'var(--amber)':p.status==='em_separacao'?'var(--blue)':'var(--green)';
       var itens = p.itens||[];
+      // Firebase may return arrays as objects - convert
+      if(itens && !Array.isArray(itens)) itens = Object.values(itens);
       var bipados = p.bipados||{};
 
       // Items table
