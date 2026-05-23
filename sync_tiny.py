@@ -311,12 +311,49 @@ def sincronizar():
     })
     print('  alertas salvos')
     
+    # Save to pedidos_abertos (for reference)
     pedidos_dict = {str(i): p for i, p in enumerate(pedidos)}
     ref.child('pedidos_abertos').set({
         'items': pedidos_dict,
         'total': len(pedidos),
         'atualizado': agora
     })
+    
+    # Also save directly to /pedidos/ with itens so WMS can use without manual import
+    def sanitize_key(k):
+        return str(k).replace('.','_').replace('#','_').replace('$','_').replace('[','_').replace(']','_').replace('/','_') or 'SEM_KEY'
+    
+    pedidos_wms = {}
+    for p in pedidos:
+        num = sanitize_key(p.get('numero','') or p.get('id','') or 'SEM_NUM')
+        # Sanitize item descriptions
+        itens_clean = []
+        for it in (p.get('itens') or []):
+            itens_clean.append({
+                'sku':   str(it.get('sku','')).encode('ascii','ignore').decode('ascii'),
+                'desc':  str(it.get('desc','')).encode('ascii','ignore').decode('ascii')[:55],
+                'qtd':   float(it.get('qtd',0) or 0),
+                'un':    str(it.get('un','UN')).encode('ascii','ignore').decode('ascii'),
+                'valor': float(it.get('valor',0) or 0),
+            })
+        pedidos_wms[num] = {
+            'numero':  num,
+            'cliente': str(p.get('cliente','') or p.get('nome_contato','')).encode('ascii','ignore').decode('ascii')[:60],
+            'valor':   float(p.get('valor',0) or 0),
+            'data':    str(p.get('data','') or p.get('data_pedido','')),
+            'status':  'pendente',
+            'origem':  'tiny',
+            'itens':   itens_clean,
+            'ts':      int(datetime.datetime.now().timestamp() * 1000),
+        }
+    
+    # Save in chunks to avoid size limits
+    pedidos_items = list(pedidos_wms.items())
+    for i in range(0, len(pedidos_items), 20):
+        chunk = dict(pedidos_items[i:i+20])
+        ref.child('pedidos').update(chunk)
+        print(f'  pedidos WMS: {min(i+20, len(pedidos_items))}/{len(pedidos_items)} salvos')
+    
     print('  pedidos salvos')
     
     ref.child('ultima_sincronizacao').set(agora)
