@@ -1858,78 +1858,98 @@ function renderSeparacao(){
     var val = snap.val();
     if(!val){ lista.innerHTML='<div class="empty">Nenhum pedido cadastrado.</div>'; return; }
     var todos = Object.values(val);
-    var pendentes = todos.filter(function(p){return p.status==='pendente';}).length;
-    var emSep = todos.filter(function(p){return p.status==='em_separacao';}).length;
+    var pendentes  = todos.filter(function(p){return p.status==='pendente';}).length;
+    var emSep      = todos.filter(function(p){return p.status==='em_separacao';}).length;
     var concluidos = todos.filter(function(p){return p.status==='concluido';}).length;
     if(metrics) metrics.innerHTML =
       '<div class="mc"><div class="ml">Total pedidos</div><div class="mv">'+todos.length+'</div></div>'+
       '<div class="mc"><div class="ml">Pendentes</div><div class="mv est-warn">'+pendentes+'</div></div>'+
       '<div class="mc"><div class="ml">Em separacao</div><div class="mv" style="color:var(--blue)">'+emSep+'</div></div>'+
       '<div class="mc"><div class="ml">Concluidos</div><div class="mv est-ok">'+concluidos+'</div></div>';
+
     var filtered = todos.filter(function(p){return p.status===sepView;});
     if(!filtered.length){ lista.innerHTML='<div class="empty">Nenhum pedido neste status.</div>'; return; }
     filtered.sort(function(a,b){return (b.ts||0)-(a.ts||0);});
+
     lista.innerHTML = filtered.map(function(p){
       var statusColor = p.status==='pendente'?'var(--amber)':p.status==='em_separacao'?'var(--blue)':'var(--green)';
+
+      // Items
       var itens = p.itens||[];
-      // Firebase may return arrays as objects - convert
       if(itens && !Array.isArray(itens)) itens = Object.values(itens);
       var bipados = p.bipados||{};
+      if(bipados && !Array.isArray(bipados) && typeof bipados === 'object'){
+        // keep as object - indexed by item index
+      }
 
-      // Items table
+      var itensDone = itens.filter(function(it,i){return (bipados[i]||0)>=it.qtd;}).length;
+
       var itensHtml = '';
-      if(itens.length){
-        var itensDone = itens.filter(function(it,i){return (bipados[i]||0)>=it.qtd;}).length;
-        itensHtml = '<div style="margin-top:10px;border-top:1px solid var(--bdr);padding-top:10px">' +
-          '<div style="font-size:11px;color:var(--gray);margin-bottom:6px">ITENS: '+itensDone+'/'+itens.length+' conferidos</div>' +
-          '<div style="display:grid;grid-template-columns:90px 1fr 60px 60px 60px;font-size:11px;color:var(--gray);padding:5px 8px;background:var(--mid);border-radius:4px 4px 0 0">' +
-            '<span>SKU</span><span>Produto</span><span style="text-align:center">Pedido</span><span style="text-align:center">Bipado</span><span></span>' +
-          '</div>' +
-          itens.map(function(it,i){
-            var bip = bipados[i]||0;
-            var ok = bip>=it.qtd;
-            var parc = bip>0&&bip<it.qtd;
-            var bg = ok?'rgba(0,192,127,.06)':parc?'rgba(245,158,11,.06)':'transparent';
-            var qc = ok?'var(--green)':parc?'var(--amber)':'#fff';
-            var btn = '';
-            if(p.status==='em_separacao'){
-              btn='<button data-p="'+p.numero+'" data-i="'+i+'" data-q="'+it.qtd+'" onclick="biparItemSepBtn(this)" style="background:none;border:1px solid rgba(0,192,127,.4);border-radius:4px;color:var(--green);font-size:10px;padding:2px 6px;cursor:pointer">'+(ok?'OK':'bipar')+'</button>';
-            }
-              '<span style="font-family:DM Mono,monospace;color:var(--green);font-size:11px">'+it.sku+'</span>' +
-              '<span style="color:#fff">'+it.desc+'</span>' +
-              '<span style="font-family:DM Mono,monospace;text-align:center">'+it.qtd+'</span>' +
-              '<span style="font-family:DM Mono,monospace;text-align:center;color:'+qc+'">'+bip+'</span>' +
-              '<span style="text-align:center">'+btn+'</span>' +
-            '</div>';
-          }).join('') +
-        '</div>';
+      if(itens.length > 0){
+        var rows = itens.map(function(it, idx){
+          var bip = bipados[idx]||0;
+          var ok  = bip >= it.qtd;
+          var par = bip > 0 && bip < it.qtd;
+          var bg  = ok ? 'rgba(0,192,127,.08)' : par ? 'rgba(245,158,11,.06)' : 'transparent';
+          var qc  = ok ? 'var(--green)' : par ? 'var(--amber)' : '#fff';
+          var bipBtn = p.status==='em_separacao'
+            ? '<button class="sep-bip-btn" data-ped="'+p.numero+'" data-idx="'+idx+'" data-qtd="'+it.qtd+'" style="background:none;border:1px solid rgba(0,192,127,.4);border-radius:4px;color:var(--green);font-size:10px;padding:2px 8px;cursor:pointer">'+(ok?'OK':'Bipar')+'</button>'
+            : '';
+          return '<div style="display:grid;grid-template-columns:90px 1fr 60px 60px 70px;padding:7px 12px;border-bottom:1px solid var(--bdr);font-size:12px;align-items:center;background:'+bg+'">'
+            + '<span style="font-family:DM Mono,monospace;color:var(--green);font-size:11px">'+it.sku+'</span>'
+            + '<span style="color:#fff">'+it.desc+'</span>'
+            + '<span style="text-align:center;font-family:DM Mono,monospace">'+it.qtd+'</span>'
+            + '<span style="text-align:center;font-family:DM Mono,monospace;color:'+qc+'">'+bip+'</span>'
+            + '<span style="text-align:center">'+bipBtn+'</span>'
+            + '</div>';
+        }).join('');
+
+        itensHtml = '<div style="margin-top:10px;border-top:1px solid var(--bdr);padding-top:8px">'
+          + '<div style="font-size:11px;color:var(--gray);margin-bottom:6px">ITENS: '+itensDone+'/'+itens.length+' conferidos</div>'
+          + '<div style="display:grid;grid-template-columns:90px 1fr 60px 60px 70px;padding:5px 12px;background:var(--mid);border-radius:4px 4px 0 0;font-size:11px;color:var(--gray)">'
+          + '<span>SKU</span><span>Produto</span><span style="text-align:center">Pedido</span><span style="text-align:center">Bipado</span><span></span>'
+          + '</div>'
+          + rows
+          + '</div>';
       } else {
-        itensHtml = '<div style="margin-top:8px;font-size:12px;color:var(--gray)">Rode o sync do Tiny para carregar os itens deste pedido.</div>';
+        itensHtml = '<div style="margin-top:8px;font-size:12px;color:var(--gray)">Aguardando sincronizacao com o Tiny para carregar os itens.</div>';
       }
 
       var actions = '';
       if(p.status==='pendente'){
-        actions = '<button class="btn bp" data-num="'+p.numero+'" onclick="iniciarSeparacao(this.getAttribute(\'data-num\'))" style="padding:6px 14px;font-size:12px;white-space:nowrap">Iniciar separacao</button>';
+        actions = '<button class="btn bp sep-iniciar-btn" data-num="'+p.numero+'" style="padding:6px 14px;font-size:12px;white-space:nowrap">Iniciar separacao</button>';
       } else if(p.status==='em_separacao'){
-        actions = '<div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">' +
-          '<button class="btn" data-num="'+p.numero+'" style="padding:6px 14px;font-size:12px;background:var(--green);color:var(--navy);white-space:nowrap" onclick="concluirSeparacao(this.getAttribute(\'data-num\'))">Concluir pedido</button>' +
-          '<button class="btn bs" data-num="'+p.numero+'" style="padding:4px 10px;font-size:11px;white-space:nowrap" onclick="abrirBipSep(this.getAttribute(\'data-num\'))">Bipar produto</button>' +
-        '</div>';
+        actions = '<div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">'
+          + '<button class="btn sep-concluir-btn" data-num="'+p.numero+'" style="padding:6px 14px;font-size:12px;background:var(--green);color:var(--navy);white-space:nowrap">Concluir pedido</button>'
+          + '<button class="btn bs sep-bipar-btn" data-num="'+p.numero+'" style="padding:4px 10px;font-size:11px;white-space:nowrap">Bipar produto</button>'
+          + '</div>';
       }
 
-      return '<div style="background:var(--card);border:1px solid var(--bdr);border-radius:var(--r);padding:14px 16px;margin-bottom:8px">' +
-        '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:4px">' +
-          '<div style="flex:1">' +
-            '<div style="font-size:14px;font-weight:600;color:#fff">Pedido #'+p.numero +
-              '<span style="font-size:11px;font-weight:400;color:'+statusColor+';margin-left:10px;padding:2px 8px;border-radius:20px;border:1px solid '+statusColor+'">'+p.status+'</span>' +
-            '</div>' +
-            '<div style="font-size:12px;color:var(--gray)">'+p.cliente+(p.valor?' | R$ '+Number(p.valor).toFixed(2).replace('.',','):'')+(p.data?' | '+p.data:'')+'</div>' +
-          '</div>' +
-          actions +
-        '</div>' +
-        itensHtml +
-      '</div>';
-    }).join('');;
+      return '<div style="background:var(--card);border:1px solid var(--bdr);border-radius:var(--r);padding:14px 16px;margin-bottom:8px">'
+        + '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:4px">'
+          + '<div style="flex:1">'
+            + '<div style="font-size:14px;font-weight:600;color:#fff">Pedido #'+p.numero
+              + '<span style="font-size:11px;font-weight:400;color:'+statusColor+';margin-left:10px;padding:2px 8px;border-radius:20px;border:1px solid '+statusColor+'">'+p.status+'</span>'
+            + '</div>'
+            + '<div style="font-size:12px;color:var(--gray)">'+p.cliente+(p.valor?' | R$ '+Number(p.valor).toFixed(2).replace('.',','):'')+(p.data?' | '+p.data:'')+'</div>'
+          + '</div>'
+          + actions
+        + '</div>'
+        + itensHtml
+      + '</div>';
+    }).join('');
+
+    // Attach events via delegation
+    lista.onclick = function(e){
+      var iniciar = e.target.closest('.sep-iniciar-btn');
+      var concluir = e.target.closest('.sep-concluir-btn');
+      var bipar = e.target.closest('.sep-bipar-btn');
+      var bipItem = e.target.closest('.sep-bip-btn');
+      if(iniciar) iniciarSeparacao(iniciar.getAttribute('data-num'));
+      if(concluir) concluirSeparacao(concluir.getAttribute('data-num'));
+      if(bipar) abrirBipSep(bipar.getAttribute('data-num'));
+      if(bipItem) biparItemSep(bipItem.getAttribute('data-ped'), bipItem.getAttribute('data-idx'), bipItem.getAttribute('data-qtd'));
+    };
   });
 }
 
