@@ -145,7 +145,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
 .scan-header{background:var(--primary);padding:14px 16px;display:flex;align-items:center;gap:12px}
 .scan-title{font-size:14px;font-weight:700;color:var(--text);flex:1}
 .scan-close{background:rgba(255,255,255,.2);border:none;color:var(--text);font-size:18px;cursor:pointer;width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center}
-.scan-video-wrap{position:relative;flex:1;overflow:hidden;background:#000}
+.scan-video-wrap{position:relative;flex:1;overflow:hidden;background:#000;min-height:300px}
 .scan-video-wrap video{width:100%;height:100%;object-fit:cover}
 .scan-overlay-box{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:220px;height:220px;border:3px solid var(--primary);border-radius:12px;box-shadow:0 0 0 9999px rgba(0,0,0,.6)}
 .scan-line{position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,transparent,var(--primary),transparent);animation:scanLine 2s linear infinite}
@@ -591,7 +591,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
     <button class="scan-close" onclick="closeScan()">X</button>
   </div>
   <div class="scan-video-wrap">
-    <div id="scan-video-container" style="width:100%;height:100%"></div>
+    <div id="scan-video-container" style="width:100%;height:100%;min-height:300px"></div>
     <div class="scan-hint" id="scan-hint">Aponte a camera para o QR Code</div>
   </div>
   <div class="scan-manual">
@@ -1249,19 +1249,29 @@ async function salvarOperacao(){
 function openScan(mode){
   var title = mode === 'palete' ? 'Bipe o QR Code do palete' : 'Bipe o codigo de barras do produto';
   document.getElementById('scan-title').textContent = title;
-  document.getElementById('scan-hint').textContent = 'Aponte o codigo de barras para a caixa azul';
+  document.getElementById('scan-hint').textContent = 'Aponte o codigo de barras para a caixa';
   document.getElementById('scan-input').value = '';
   document.getElementById('scan-input').placeholder = mode === 'palete' ? 'Ou digite o endereco (ex: A01)...' : 'Ou digite o EAN ou SKU...';
   document.getElementById('scan-screen').classList.add('active');
 
-  // Use html5-qrcode - best library for mobile EAN scanning
+  // Clean up container
+  var container = document.getElementById('scan-video-container');
+  container.innerHTML = '';
+
+  if(typeof Html5Qrcode === 'undefined'){
+    document.getElementById('scan-hint').textContent = 'Scanner nao carregado - use o campo abaixo';
+    return;
+  }
+
   var html5QrCode = new Html5Qrcode('scan-video-container');
   window._html5QrCode = html5QrCode;
 
+  var containerWidth = Math.min(window.innerWidth, 800);
+  var boxSize = Math.min(containerWidth - 40, 250);
+
   var config = {
-    fps: 15,
-    qrbox: { width: 220, height: 180 },
-    aspectRatio: 1.0,
+    fps: 10,
+    qrbox: { width: boxSize, height: Math.round(boxSize * 0.6) },
     formatsToSupport: [
       Html5QrcodeSupportedFormats.EAN_13,
       Html5QrcodeSupportedFormats.EAN_8,
@@ -1270,24 +1280,44 @@ function openScan(mode){
       Html5QrcodeSupportedFormats.UPC_A,
       Html5QrcodeSupportedFormats.UPC_E,
       Html5QrcodeSupportedFormats.QR_CODE
-    ]
+    ],
+    rememberLastUsedCamera: true,
+    showTorchButtonIfSupported: true
   };
 
-  html5QrCode.start(
-    { facingMode: 'environment' },
-    config,
-    function(decodedText, decodedResult) {
-      if(scanCallback && typeof scanCallback === 'function'){
-        var cb = scanCallback;
-        scanCallback = null;
-        closeScan();
-        cb(decodedText);
+  Html5Qrcode.getCameras().then(function(cameras){
+    if(!cameras || cameras.length === 0){
+      document.getElementById('scan-hint').textContent = 'Nenhuma camera encontrada - use o campo abaixo';
+      return;
+    }
+    // Prefer back camera
+    var cameraId = cameras[cameras.length - 1].id;
+    for(var i = 0; i < cameras.length; i++){
+      var label = (cameras[i].label||'').toLowerCase();
+      if(label.includes('back') || label.includes('traseira') || label.includes('rear') || label.includes('environment')){
+        cameraId = cameras[i].id;
+        break;
       }
-    },
-    function(errorMsg){ /* ignore scan errors */ }
-  ).catch(function(err){
-    console.error('html5-qrcode error:', err);
-    document.getElementById('scan-hint').textContent = 'Camera indisponivel - use o campo abaixo';
+    }
+    html5QrCode.start(
+      cameraId,
+      config,
+      function(decodedText){
+        if(scanCallback && typeof scanCallback === 'function'){
+          var cb = scanCallback;
+          scanCallback = null;
+          closeScan();
+          cb(decodedText);
+        }
+      },
+      function(err){ /* scanning continuously - ignore errors */ }
+    ).catch(function(err){
+      console.error('Scanner start error:', err);
+      document.getElementById('scan-hint').textContent = 'Erro ao abrir camera: ' + err;
+    });
+  }).catch(function(err){
+    console.error('getCameras error:', err);
+    document.getElementById('scan-hint').textContent = 'Permissao de camera negada - use o campo abaixo';
   });
 }
 
