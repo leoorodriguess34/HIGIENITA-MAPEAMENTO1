@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>WMS Higienita</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
@@ -596,7 +596,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
     <div class="scan-hint" id="scan-hint">Aponte a camera para o QR Code</div>
   </div>
   <div class="scan-manual">
-    <input id="scan-input" placeholder="Ou digite o codigo manualmente..." onkeydown="if(event.key==='Enter'&&scanCallback)scanManual()">
+    <input id="scan-input" placeholder="Ou digite o codigo manualmente..." onkeydown="if(event.key==='Enter'&&typeof scanCallback==='function')scanManual()">
   </div>
 </div>
 
@@ -1249,32 +1249,51 @@ async function salvarOperacao(){
 // -- CAMERA SCANNER --
 function openScan(mode){
   var title = mode === 'palete' ? 'Bipe o QR Code do palete' : 'Bipe o codigo de barras do produto';
-  var hint  = mode === 'palete' ? 'Aponte para o QR Code do palete' : 'Aponte para o codigo de barras do produto';
-
+  var hint  = mode === 'palete' ? 'Aponte para o QR Code do palete' : 'Aponte o codigo de barras para a caixa azul';
   document.getElementById('scan-title').textContent = title;
   document.getElementById('scan-hint').textContent  = hint;
   document.getElementById('scan-input').value = '';
-  document.getElementById('scan-input').placeholder = mode === 'palete' ? 'Ou digite o endereco (ex: A01)...' : 'Ou digite o SKU do produto...';
+  document.getElementById('scan-input').placeholder = mode === 'palete' ? 'Ou digite o endereco (ex: A01)...' : 'Ou digite o EAN ou SKU...';
   document.getElementById('scan-screen').classList.add('active');
+  var video = document.getElementById('scan-video');
 
-  scanCallback = function(code){
-    closeScan();
-    if(mode === 'palete') confirmarPalete(code);
-    else confirmarProduto(code);
-  };
+  // ZXing reads EAN-13, EAN-8, Code128, QR Code, UPC-A, etc.
+  if(typeof ZXing !== 'undefined'){
+    try{
+      var hints = new Map();
+      hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS,[
+        ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8,
+        ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.CODE_39,
+        ZXing.BarcodeFormat.UPC_A, ZXing.BarcodeFormat.UPC_E,
+        ZXing.BarcodeFormat.QR_CODE
+      ]);
+      hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+      zxingReader = new ZXing.BrowserMultiFormatReader(hints);
+      zxingReader.decodeFromVideoDevice(null, video, function(result, err){
+        if(result && result.getText && scanCallback){
+          var code = result.getText();
+          if(code){ var cb=scanCallback; closeScan(); cb(code); }
+        }
+      });
+      return;
+    }catch(e){ console.error('ZXing init error:',e); }
+  }
 
+  // Fallback: getUserMedia only (manual input)
   navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}})
     .then(function(stream){
       scanStream = stream;
-      var video = document.getElementById('scan-video');
       video.srcObject = stream;
       video.play();
-      requestAnimationFrame(tickScan);
+      document.getElementById('scan-hint').textContent = 'Camera aberta. Digite o codigo abaixo:';
     })
     .catch(function(e){
-      alert('Camera nao disponivel. Use o campo de texto abaixo.\n(' + e.message + ')');
+      document.getElementById('scan-screen').classList.remove('active');
+      var val = prompt('Digite o EAN ou SKU do produto:');
+      if(val && scanCallback){ var cb=scanCallback; scanCallback=null; cb(val.trim()); }
     });
 }
+
 
 function tickScan(){
   var video = document.getElementById('scan-video');
@@ -1295,14 +1314,23 @@ function tickScan(){
 function scanManual(){
   var val = document.getElementById('scan-input').value.trim();
   if(!val) return;
-  if(scanCallback){ closeScan(); scanCallback(val); }
-  else { closeScan(); toast('Use o botao de bipar para iniciar uma operacao', false); }
+  if(scanCallback && typeof scanCallback === 'function'){
+    var cb = scanCallback;
+    scanCallback = null;
+    closeScan();
+    cb(val);
+  }
+  // If no callback just ignore - user might have typed in wrong field
 }
 
 function closeScan(){
   document.getElementById('scan-screen').classList.remove('active');
+  if(zxingReader){ try{ zxingReader.reset(); }catch(e){} zxingReader=null; }
   if(scanStream){ scanStream.getTracks().forEach(function(t){t.stop();}); scanStream=null; }
   if(scanAnimFrame){ cancelAnimationFrame(scanAnimFrame); scanAnimFrame=null; }
+  // Stop video element
+  var video = document.getElementById('scan-video');
+  if(video){ video.srcObject=null; }
   scanCallback = null;
 }
 
@@ -2295,14 +2323,18 @@ function biparItemSepBtn(el){
 }
 
 function biparItemSep(numPedido, idx, qtdTotal){
-  var qtd = prompt('Quantidade bipada do item (total esperado: '+qtdTotal+'):');
-  if(!qtd) return;
-  var n = parseInt(qtd);
-  if(isNaN(n)||n<0) return;
-  rtdb.ref('pedidos/'+numPedido+'/bipados/'+idx).set(n).then(function(){
-    if(n>=qtdTotal) toast('Item concluido!', true);
-    else toast('Bipado '+n+'/'+qtdTotal, true);
-    renderSeparacao();
+  // Add 1 to bipado count (1 bipe = 1 unit)
+  rtdb.ref('pedidos/'+numPedido+'/bipados/'+idx).once('value', function(snap){
+    var atual = snap.val()||0;
+    var novo = atual + 1;
+    rtdb.ref('pedidos/'+numPedido+'/bipados/'+idx).set(novo).then(function(){
+      if(novo >= parseInt(qtdTotal)){
+        toast('Item concluido! ('+novo+'/'+qtdTotal+')', true);
+      } else {
+        toast('Bipado: '+novo+'/'+qtdTotal, true);
+      }
+      renderSeparacao();
+    });
   });
 }
 
