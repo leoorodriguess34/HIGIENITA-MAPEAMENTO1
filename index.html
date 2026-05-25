@@ -632,20 +632,27 @@ function loginGoogle(){
   var provider = new firebase.auth.GoogleAuthProvider();
   provider.addScope('email');
   provider.addScope('profile');
-  // Try popup first on all devices (works on Android Chrome)
-  auth.signInWithPopup(provider)
-    .then(function(result){
-      // onAuthStateChanged will handle the rest
-    })
-    .catch(function(e){
-      console.log('Popup failed, trying redirect:', e.code);
-      // Fallback to redirect (for Safari, WebView, etc.)
-      if(e.code !== 'auth/popup-closed-by-user' && e.code !== 'auth/cancelled-popup-request'){
-        auth.signInWithRedirect(provider).catch(function(e2){
-          alert('Erro ao fazer login: '+e2.message);
-        });
-      }
+
+  var isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+  var isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+
+  if(isIOS || isSafari){
+    // iOS Safari: must use redirect (popup blocked)
+    auth.signInWithRedirect(provider).catch(function(e){
+      alert('Erro ao fazer login: ' + e.message);
     });
+  } else {
+    // Android Chrome, desktop: use popup
+    auth.signInWithPopup(provider)
+      .catch(function(e){
+        console.log('Popup failed, trying redirect:', e.code);
+        if(e.code !== 'auth/popup-closed-by-user' && e.code !== 'auth/cancelled-popup-request'){
+          auth.signInWithRedirect(provider).catch(function(e2){
+            alert('Erro ao fazer login: ' + e2.message);
+          });
+        }
+      });
+  }
 }
 
 function logout(){
