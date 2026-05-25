@@ -587,15 +587,33 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
 <!-- SCAN SCREEN -->
 <div class="scan-screen" id="scan-screen">
   <div class="scan-header">
-    <span class="scan-title" id="scan-title">Bipando palete...</span>
+    <span class="scan-title" id="scan-title">Bipando produto...</span>
     <button class="scan-close" onclick="closeScan()">X</button>
   </div>
-  <div class="scan-video-wrap">
+  <div class="scan-video-wrap" id="scan-video-wrap">
     <div id="scan-video-container" style="width:100%;height:100%;min-height:300px"></div>
-    <div class="scan-hint" id="scan-hint">Aponte a camera para o QR Code</div>
+    <div class="scan-hint" id="scan-hint">Carregando camera...</div>
   </div>
-  <div class="scan-manual">
-    <input id="scan-input" placeholder="Ou digite o codigo manualmente..." onkeydown="if(event.key==='Enter'&&typeof scanCallback==='function')scanManual()">
+  <div class="scan-manual" style="padding:16px">
+    <div style="font-size:12px;color:var(--text3);margin-bottom:8px;text-align:center">iPhone? Use o campo abaixo  bipe com a camera nativa</div>
+    <!-- iOS native barcode input -->
+    <input id="scan-input-ios"
+      type="text"
+      inputmode="none"
+      autocomplete="off"
+      autocorrect="off"
+      autocapitalize="off"
+      spellcheck="false"
+      placeholder="Aponte o leitor ou cole o codigo aqui..."
+      style="width:100%;background:var(--surface3);border:1.5px solid var(--bdr2);border-radius:var(--rs);color:var(--text);padding:12px 14px;font-size:16px;font-family:DM Mono,monospace;outline:none;margin-bottom:8px"
+      oninput="scanInputChange(this.value)"
+      onkeydown="if(event.key==='Enter')scanManual()">
+    <div style="display:flex;gap:8px">
+      <button onclick="scanManual()" class="btn bp" style="flex:1;padding:11px">Confirmar codigo</button>
+    </div>
+    <div style="text-align:center;margin-top:10px;font-size:11px;color:var(--text3)">
+      No iPhone: configure seu leitor bluetooth para enviar Enter apos o codigo
+    </div>
   </div>
 </div>
 
@@ -1264,114 +1282,62 @@ async function salvarOperacao(){
 function openScan(mode){
   var title = mode === 'palete' ? 'Bipe o QR Code do palete' : 'Bipe o codigo de barras do produto';
   document.getElementById('scan-title').textContent = title;
-  document.getElementById('scan-hint').textContent = 'Posicione o codigo de barras na caixa';
-  document.getElementById('scan-input').value = '';
-  document.getElementById('scan-input').placeholder = mode === 'palete' ? 'Ou digite o endereco (ex: A01)...' : 'Ou digite o EAN ou SKU...';
+  document.getElementById('scan-hint').textContent = 'Carregando camera...';
+  var iosInput = document.getElementById('scan-input-ios');
+  if(iosInput){ iosInput.value = ''; }
   document.getElementById('scan-screen').classList.add('active');
 
+  var isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+  // Clear container
   var container = document.getElementById('scan-video-container');
   container.innerHTML = '';
 
-  // Strategy 1: BarcodeDetector API (Chrome Android, Chrome desktop)
+  if(isIOS){
+    // iOS: hide video area, show only manual input with focus
+    var wrap = document.getElementById('scan-video-wrap');
+    if(wrap) wrap.style.display = 'none';
+    document.getElementById('scan-hint').textContent = 'Digite ou cole o codigo EAN abaixo';
+    if(iosInput){
+      setTimeout(function(){ iosInput.focus(); }, 300);
+    }
+    return;
+  }
+
+  // Non-iOS: show video area
+  var wrap = document.getElementById('scan-video-wrap');
+  if(wrap) wrap.style.display = '';
+
+  // Try BarcodeDetector first (Chrome Android)
   if('BarcodeDetector' in window){
+    document.getElementById('scan-hint').textContent = 'Aponte o codigo de barras para a camera';
     startBarcodeDetector(container);
     return;
   }
 
-  // Strategy 2: html5-qrcode (most browsers)
+  // Fallback: html5-qrcode
   if(typeof Html5Qrcode !== 'undefined'){
+    document.getElementById('scan-hint').textContent = 'Posicione o codigo na caixa';
     startHtml5QrCode(container);
     return;
   }
 
-  // Fallback: just show camera + manual input
-  document.getElementById('scan-hint').textContent = 'Digite o EAN no campo abaixo e pressione Enter';
+  document.getElementById('scan-hint').textContent = 'Use o campo abaixo para digitar o codigo';
 }
 
-function startBarcodeDetector(container){
-  var video = document.createElement('video');
-  video.setAttribute('playsinline', '');
-  video.setAttribute('autoplay', '');
-  video.setAttribute('muted', '');
-  video.style.cssText = 'width:100%;height:100%;object-fit:cover;position:absolute;top:0;left:0';
-  container.style.position = 'relative';
-  container.style.minHeight = '350px';
-  container.appendChild(video);
-
-  // Add scan box overlay
-  var overlay = document.createElement('div');
-  overlay.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:260px;height:160px;border:3px solid #0FA3C8;border-radius:8px;box-shadow:0 0 0 9999px rgba(0,0,0,.5);z-index:2';
-  container.appendChild(overlay);
-
-  var detector = new BarcodeDetector({
-    formats: ['ean_13','ean_8','code_128','code_39','upc_a','upc_e','qr_code']
-  });
-
-  navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280},height:{ideal:720}}})
-    .then(function(stream){
-      scanStream = stream;
-      video.srcObject = stream;
-      video.play();
-
-      function detect(){
-        if(!scanCallback){ return; }
-        if(video.readyState < 2){ scanAnimFrame = requestAnimationFrame(detect); return; }
-        detector.detect(video).then(function(barcodes){
-          if(barcodes.length > 0 && scanCallback){
-            var code = barcodes[0].rawValue;
-            var cb = scanCallback; scanCallback = null;
-            closeScan(); cb(code);
-          } else {
-            scanAnimFrame = requestAnimationFrame(detect);
-          }
-        }).catch(function(){ scanAnimFrame = requestAnimationFrame(detect); });
+function scanInputChange(val){
+  // Auto-detect when a barcode reader pastes a complete EAN (13+ chars)
+  val = val.trim();
+  if(val.length >= 8 && /^[0-9]+$/.test(val)){
+    // Looks like a barcode - auto-confirm after short delay
+    clearTimeout(window._scanInputTimer);
+    window._scanInputTimer = setTimeout(function(){
+      var current = document.getElementById('scan-input-ios').value.trim();
+      if(current === val && scanCallback && typeof scanCallback === 'function'){
+        scanManual();
       }
-      scanAnimFrame = requestAnimationFrame(detect);
-    })
-    .catch(function(e){
-      document.getElementById('scan-hint').textContent = 'Camera negada - use o campo abaixo';
-    });
-}
-
-function startHtml5QrCode(container){
-  container.style.minHeight = '350px';
-  var boxSize = Math.min(window.innerWidth - 60, 260);
-  var html5QrCode = new Html5Qrcode('scan-video-container');
-  window._html5QrCode = html5QrCode;
-
-  Html5Qrcode.getCameras().then(function(cameras){
-    if(!cameras||cameras.length===0){
-      document.getElementById('scan-hint').textContent = 'Nenhuma camera - use o campo abaixo';
-      return;
-    }
-    // Pick back camera
-    var cam = cameras[cameras.length-1];
-    for(var i=0;i<cameras.length;i++){
-      var lbl=(cameras[i].label||'').toLowerCase();
-      if(lbl.includes('back')||lbl.includes('traseira')||lbl.includes('rear')||lbl.includes('0')){
-        cam=cameras[i]; break;
-      }
-    }
-    html5QrCode.start(cam.id,
-      {fps:10, qrbox:{width:boxSize,height:Math.round(boxSize*0.6)},
-       formatsToSupport:[
-         Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8,
-         Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.CODE_39,
-         Html5QrcodeSupportedFormats.UPC_A, Html5QrcodeSupportedFormats.UPC_E,
-         Html5QrcodeSupportedFormats.QR_CODE
-       ]},
-      function(decoded){
-        if(scanCallback&&typeof scanCallback==='function'){
-          var cb=scanCallback; scanCallback=null; closeScan(); cb(decoded);
-        }
-      },
-      function(){}
-    ).catch(function(e){
-      document.getElementById('scan-hint').textContent='Erro camera: '+e+' - use o campo abaixo';
-    });
-  }).catch(function(){
-    document.getElementById('scan-hint').textContent='Permissao negada - use o campo abaixo';
-  });
+    }, 500);
+  }
 }
 
 
@@ -1392,7 +1358,12 @@ function tickScan(){
 }
 
 function scanManual(){
-  var val = document.getElementById('scan-input').value.trim();
+  // Try both inputs
+  var val = '';
+  var iosInput = document.getElementById('scan-input-ios');
+  var regInput = document.getElementById('scan-input');
+  if(iosInput && iosInput.value.trim()) val = iosInput.value.trim();
+  else if(regInput && regInput.value.trim()) val = regInput.value.trim();
   if(!val) return;
   if(scanCallback && typeof scanCallback === 'function'){
     var cb = scanCallback;
@@ -1400,19 +1371,21 @@ function scanManual(){
     closeScan();
     cb(val);
   }
-  // If no callback just ignore - user might have typed in wrong field
 }
 
 function closeScan(){
   document.getElementById('scan-screen').classList.remove('active');
   scanCallback = null;
+  clearTimeout(window._scanInputTimer);
+  // Restore video wrap visibility
+  var wrap = document.getElementById('scan-video-wrap');
+  if(wrap) wrap.style.display = '';
   if(window._html5QrCode){
     try{ window._html5QrCode.stop().then(function(){window._html5QrCode=null;}).catch(function(){window._html5QrCode=null;}); }
     catch(e){ window._html5QrCode=null; }
   }
   if(scanStream){ scanStream.getTracks().forEach(function(t){t.stop();}); scanStream=null; }
   if(scanAnimFrame){ cancelAnimationFrame(scanAnimFrame); scanAnimFrame=null; }
-  // Clear container
   var c=document.getElementById('scan-video-container');
   if(c) c.innerHTML='';
 }
