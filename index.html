@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>WMS Higienita</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js"></script>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
@@ -591,8 +591,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
     <button class="scan-close" onclick="closeScan()">X</button>
   </div>
   <div class="scan-video-wrap">
-    <video id="scan-video" playsinline autoplay muted></video>
-    <div class="scan-overlay-box"><div class="scan-line"></div></div>
+    <div id="scan-video-container" style="width:100%;height:100%"></div>
     <div class="scan-hint" id="scan-hint">Aponte a camera para o QR Code</div>
   </div>
   <div class="scan-manual">
@@ -1249,49 +1248,47 @@ async function salvarOperacao(){
 // -- CAMERA SCANNER --
 function openScan(mode){
   var title = mode === 'palete' ? 'Bipe o QR Code do palete' : 'Bipe o codigo de barras do produto';
-  var hint  = mode === 'palete' ? 'Aponte para o QR Code do palete' : 'Aponte o codigo de barras para a caixa azul';
   document.getElementById('scan-title').textContent = title;
-  document.getElementById('scan-hint').textContent  = hint;
+  document.getElementById('scan-hint').textContent = 'Aponte o codigo de barras para a caixa azul';
   document.getElementById('scan-input').value = '';
   document.getElementById('scan-input').placeholder = mode === 'palete' ? 'Ou digite o endereco (ex: A01)...' : 'Ou digite o EAN ou SKU...';
   document.getElementById('scan-screen').classList.add('active');
-  var video = document.getElementById('scan-video');
 
-  // ZXing reads EAN-13, EAN-8, Code128, QR Code, UPC-A, etc.
-  if(typeof ZXing !== 'undefined'){
-    try{
-      var hints = new Map();
-      hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS,[
-        ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8,
-        ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.CODE_39,
-        ZXing.BarcodeFormat.UPC_A, ZXing.BarcodeFormat.UPC_E,
-        ZXing.BarcodeFormat.QR_CODE
-      ]);
-      hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-      zxingReader = new ZXing.BrowserMultiFormatReader(hints);
-      zxingReader.decodeFromVideoDevice(null, video, function(result, err){
-        if(result && result.getText && scanCallback){
-          var code = result.getText();
-          if(code){ var cb=scanCallback; closeScan(); cb(code); }
-        }
-      });
-      return;
-    }catch(e){ console.error('ZXing init error:',e); }
-  }
+  // Use html5-qrcode - best library for mobile EAN scanning
+  var html5QrCode = new Html5Qrcode('scan-video-container');
+  window._html5QrCode = html5QrCode;
 
-  // Fallback: getUserMedia only (manual input)
-  navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}})
-    .then(function(stream){
-      scanStream = stream;
-      video.srcObject = stream;
-      video.play();
-      document.getElementById('scan-hint').textContent = 'Camera aberta. Digite o codigo abaixo:';
-    })
-    .catch(function(e){
-      document.getElementById('scan-screen').classList.remove('active');
-      var val = prompt('Digite o EAN ou SKU do produto:');
-      if(val && scanCallback){ var cb=scanCallback; scanCallback=null; cb(val.trim()); }
-    });
+  var config = {
+    fps: 15,
+    qrbox: { width: 220, height: 180 },
+    aspectRatio: 1.0,
+    formatsToSupport: [
+      Html5QrcodeSupportedFormats.EAN_13,
+      Html5QrcodeSupportedFormats.EAN_8,
+      Html5QrcodeSupportedFormats.CODE_128,
+      Html5QrcodeSupportedFormats.CODE_39,
+      Html5QrcodeSupportedFormats.UPC_A,
+      Html5QrcodeSupportedFormats.UPC_E,
+      Html5QrcodeSupportedFormats.QR_CODE
+    ]
+  };
+
+  html5QrCode.start(
+    { facingMode: 'environment' },
+    config,
+    function(decodedText, decodedResult) {
+      if(scanCallback && typeof scanCallback === 'function'){
+        var cb = scanCallback;
+        scanCallback = null;
+        closeScan();
+        cb(decodedText);
+      }
+    },
+    function(errorMsg){ /* ignore scan errors */ }
+  ).catch(function(err){
+    console.error('html5-qrcode error:', err);
+    document.getElementById('scan-hint').textContent = 'Camera indisponivel - use o campo abaixo';
+  });
 }
 
 
@@ -1325,12 +1322,14 @@ function scanManual(){
 
 function closeScan(){
   document.getElementById('scan-screen').classList.remove('active');
-  if(zxingReader){ try{ zxingReader.reset(); }catch(e){} zxingReader=null; }
+  if(window._html5QrCode){
+    window._html5QrCode.stop().then(function(){
+      window._html5QrCode.clear();
+      window._html5QrCode = null;
+    }).catch(function(e){ window._html5QrCode = null; });
+  }
   if(scanStream){ scanStream.getTracks().forEach(function(t){t.stop();}); scanStream=null; }
   if(scanAnimFrame){ cancelAnimationFrame(scanAnimFrame); scanAnimFrame=null; }
-  // Stop video element
-  var video = document.getElementById('scan-video');
-  if(video){ video.srcObject=null; }
   scanCallback = null;
 }
 
