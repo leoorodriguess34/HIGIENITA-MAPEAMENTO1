@@ -183,6 +183,31 @@ def buscar_pedidos_abertos():
                     'valor':  float(item_d.get('valor_unitario', 0) or 0),
                 })
             ped['itens'] = itens
+            
+            # Capture canal/plataforma from tags or ecommerce field
+            canal = ''
+            # Try ecommerce field first
+            ecommerce = pedido_det.get('ecommerce', {})
+            if ecommerce:
+                canal = str(ecommerce.get('canal', '') or ecommerce.get('nome_loja', '') or '')
+            
+            # Try tags/marcadores
+            if not canal:
+                marcadores = pedido_det.get('marcadores', [])
+                if isinstance(marcadores, list) and marcadores:
+                    tags = [str(m.get('marcador', {}).get('descricao', '') if isinstance(m, dict) else m) for m in marcadores]
+                    canal = ', '.join([t for t in tags if t])
+            
+            # Try forma_envio or obs for channel hints
+            if not canal:
+                obs = str(pedido_det.get('obs', '') or '')
+                for plat in ['mercado livre', 'mercadolivre', 'shopee', 'magazine', 'magalu', 'amazon', 'tiktok', 'b2w', 'americanas']:
+                    if plat in obs.lower():
+                        canal = plat.title()
+                        break
+            
+            if canal:
+                ped['canal'] = canal.encode('ascii', 'ignore').decode('ascii').strip()[:40]
         else:
             ped['itens'] = []
         pedidos_com_itens.append(ped)
@@ -336,6 +361,7 @@ def sincronizar():
                 'un':    str(it.get('un','UN')).encode('ascii','ignore').decode('ascii'),
                 'valor': float(it.get('valor',0) or 0),
             })
+        canal_raw = str(p.get('canal','') or p.get('ecommerce','') or '')
         pedidos_wms[num] = {
             'numero':  num,
             'cliente': str(p.get('cliente','') or p.get('nome_contato','')).encode('ascii','ignore').decode('ascii')[:60],
@@ -343,6 +369,7 @@ def sincronizar():
             'data':    str(p.get('data','') or p.get('data_pedido','')),
             'status':  'pendente',
             'origem':  'tiny',
+            'canal':   canal_raw.encode('ascii','ignore').decode('ascii').strip()[:40],
             'itens':   itens_clean,
             'ts':      int(datetime.datetime.now().timestamp() * 1000),
         }
