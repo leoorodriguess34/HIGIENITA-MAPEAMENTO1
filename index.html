@@ -445,16 +445,28 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
        SEPARACAO DE PEDIDOS
    -->
   <div id="tab-separacao" style="display:none">
-    <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
-      <div style="display:flex;gap:2px;background:var(--surface2);border-radius:var(--rs);padding:2px">
-        <button onclick="setSepView('pendente')" id="sv-pendente" class="btn" style="padding:5px 12px;font-size:12px;border-radius:4px;background:var(--green);color:var(--navy)">Pendentes</button>
-        <button onclick="setSepView('em_separacao')" id="sv-em_separacao" class="btn" style="padding:5px 12px;font-size:12px;border-radius:4px;background:transparent;color:var(--text3)">Em separacao</button>
-        <button onclick="setSepView('concluido')" id="sv-concluido" class="btn" style="padding:5px 12px;font-size:12px;border-radius:4px;background:transparent;color:var(--text3)">Concluidos</button>
+    <!-- Status tabs -->
+    <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center">
+      <div style="display:flex;gap:2px;background:var(--surface3);border-radius:var(--rs);padding:2px;border:1px solid var(--bdr2)">
+        <button onclick="setSepView('pendente')" id="sv-pendente" class="btn" style="padding:6px 14px;font-size:12px;border-radius:6px;background:var(--primary);color:#fff;font-weight:600">Pendentes</button>
+        <button onclick="setSepView('em_separacao')" id="sv-em_separacao" class="btn" style="padding:6px 14px;font-size:12px;border-radius:6px;background:transparent;color:var(--text3);font-weight:600">Em separacao</button>
+        <button onclick="setSepView('concluido')" id="sv-concluido" class="btn" style="padding:6px 14px;font-size:12px;border-radius:6px;background:transparent;color:var(--text3);font-weight:600">Concluidos</button>
       </div>
-      <button class="btn bp" onclick="novosPedidosTiny()" style="margin-left:auto">Importar do Tiny</button>
-      <button class="btn bs" onclick="novoPedidoManual()">+ Novo pedido manual</button>
+      <button class="btn bp" onclick="novosPedidosTiny()" style="margin-left:auto;padding:6px 14px;font-size:12px">Importar do Tiny</button>
+      <button class="btn bs" onclick="novoPedidoManual()" style="padding:6px 14px;font-size:12px">+ Pedido manual</button>
     </div>
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px" id="sep-metrics"></div>
+    <!-- Platform filters -->
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
+      <button onclick="setSepPlat('')" id="sp-all" style="padding:4px 14px;border-radius:20px;border:1.5px solid var(--primary);background:var(--primary);color:#fff;font-size:12px;font-weight:700;cursor:pointer;transition:opacity .15s">Todas</button>
+      <button onclick="setSepPlat('Mercado Livre')" style="padding:4px 14px;border-radius:20px;border:1.5px solid #c8a800;background:#FFE600;color:#333;font-size:12px;font-weight:700;cursor:pointer;transition:opacity .15s">Mercado Livre</button>
+      <button onclick="setSepPlat('Shopee')" style="padding:4px 14px;border-radius:20px;border:1.5px solid #c03e24;background:#EE4D2D;color:#fff;font-size:12px;font-weight:700;cursor:pointer;transition:opacity .15s">Shopee</button>
+      <button onclick="setSepPlat('Magalu')" style="padding:4px 14px;border-radius:20px;border:1.5px solid #990000;background:#CC0000;color:#fff;font-size:12px;font-weight:700;cursor:pointer;transition:opacity .15s">Magalu</button>
+      <button onclick="setSepPlat('Amazon')" style="padding:4px 14px;border-radius:20px;border:1.5px solid #cc7a00;background:#FF9900;color:#333;font-size:12px;font-weight:700;cursor:pointer;transition:opacity .15s">Amazon</button>
+      <button onclick="setSepPlat('TikTok')" style="padding:4px 14px;border-radius:20px;border:1.5px solid #333;background:#010101;color:#fff;font-size:12px;font-weight:700;cursor:pointer;transition:opacity .15s">TikTok</button>
+      <button onclick="setSepPlat('Condominio')" style="padding:4px 14px;border-radius:20px;border:1.5px solid var(--primary-dk);background:var(--primary-dk);color:#fff;font-size:12px;font-weight:700;cursor:pointer;transition:opacity .15s">Condominio/B2B</button>
+      <button onclick="setSepPlat('outros')" style="padding:4px 14px;border-radius:20px;border:1.5px solid var(--bdr2);background:var(--surface3);color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;transition:opacity .15s">Outros</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px;margin-bottom:14px" id="sep-metrics">
     <div id="sep-lista"></div>
   </div>
 
@@ -1888,6 +1900,7 @@ function loadRecebimentos(){
 // 
 
 var sepView = 'pendente';
+var sepPlat = '';
 
 function setSepView(v){
   sepView = v;
@@ -1959,13 +1972,25 @@ function renderSeparacao(){
     var pendentes  = todos.filter(function(p){return p.status==='pendente';}).length;
     var emSep      = todos.filter(function(p){return p.status==='em_separacao';}).length;
     var concluidos = todos.filter(function(p){return p.status==='concluido';}).length;
+    var mlCount = todos.filter(function(p){return getPlatform(p.canal||'')==='Mercado Livre';}).length;
+    var spCount = todos.filter(function(p){return getPlatform(p.canal||'')==='Shopee';}).length;
+    var cdCount = todos.filter(function(p){return getPlatform(p.canal||'')==='Condominio';}).length;
     if(metrics) metrics.innerHTML =
-      '<div class="mc"><div class="ml">Total pedidos</div><div class="mv">'+todos.length+'</div></div>'+
+      '<div class="mc"><div class="ml">Total</div><div class="mv">'+todos.length+'</div></div>'+
       '<div class="mc"><div class="ml">Pendentes</div><div class="mv est-warn">'+pendentes+'</div></div>'+
       '<div class="mc"><div class="ml">Em separacao</div><div class="mv" style="color:var(--primary)">'+emSep+'</div></div>'+
-      '<div class="mc"><div class="ml">Concluidos</div><div class="mv est-ok">'+concluidos+'</div></div>';
+      '<div class="mc"><div class="ml">Concluidos</div><div class="mv est-ok">'+concluidos+'</div></div>'+
+      '<div class="mc"><div class="ml" style="color:#333">Mercado Livre</div><div class="mv" style="color:#c8a800">'+mlCount+'</div></div>'+
+      '<div class="mc"><div class="ml" style="color:#EE4D2D">Shopee</div><div class="mv" style="color:#EE4D2D">'+spCount+'</div></div>'+
+      '<div class="mc"><div class="ml" style="color:var(--primary)">Condominio</div><div class="mv" style="color:var(--primary)">'+cdCount+'</div></div>';
 
-    var filtered = todos.filter(function(p){return p.status===sepView;});
+    var filtered = todos.filter(function(p){
+      if(p.status !== sepView) return false;
+      if(!sepPlat) return true;
+      var plat = getPlatform(p.canal||'');
+      if(sepPlat === 'outros') return !['Mercado Livre','Shopee','Magalu','Amazon','TikTok','Americanas','Condominio'].includes(plat);
+      return plat === sepPlat;
+    });
     if(!filtered.length){ lista.innerHTML='<div class="empty">Nenhum pedido neste status.</div>'; return; }
     filtered.sort(function(a,b){return (b.ts||0)-(a.ts||0);});
 
@@ -2062,9 +2087,10 @@ function renderSeparacao(){
       return '<div style="background:var(--surface);border:1.5px solid var(--bdr2);border-radius:var(--r);padding:16px;margin-bottom:10px;box-shadow:var(--shadow)">'
         + '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:8px">'
           + '<div style="flex:1">'
-            + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">'
+            + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap">'
               + '<span style="font-size:15px;font-weight:800;color:var(--text)">Pedido #'+p.numero+'</span>'
               + '<span style="font-size:11px;font-weight:700;color:'+badgeColor+';background:'+badgeBg+';padding:2px 10px;border-radius:20px">'+p.status+'</span>'
+              + getPlatBadge(p.canal||'')
             + '</div>'
             + '<div style="font-size:12px;color:var(--text3)">'
               + (p.cliente||'') + (p.valor?' &nbsp;|&nbsp; <strong style="color:var(--text)">R$ '+Number(p.valor).toFixed(2).replace('.',',')+'</strong>':'')
