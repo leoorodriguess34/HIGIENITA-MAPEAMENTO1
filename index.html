@@ -630,18 +630,22 @@ var currentUser = null;
 
 function loginGoogle(){
   var provider = new firebase.auth.GoogleAuthProvider();
-  // Use redirect on mobile (more reliable), popup on desktop
-  var isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-  if(isMobile){
-    auth.signInWithRedirect(provider).catch(function(e){
-      alert('Erro ao fazer login: '+e.message);
+  provider.addScope('email');
+  provider.addScope('profile');
+  // Try popup first on all devices (works on Android Chrome)
+  auth.signInWithPopup(provider)
+    .then(function(result){
+      // onAuthStateChanged will handle the rest
+    })
+    .catch(function(e){
+      console.log('Popup failed, trying redirect:', e.code);
+      // Fallback to redirect (for Safari, WebView, etc.)
+      if(e.code !== 'auth/popup-closed-by-user' && e.code !== 'auth/cancelled-popup-request'){
+        auth.signInWithRedirect(provider).catch(function(e2){
+          alert('Erro ao fazer login: '+e2.message);
+        });
+      }
     });
-  } else {
-    auth.signInWithPopup(provider).catch(function(e){
-      // Fallback to redirect if popup blocked
-      auth.signInWithRedirect(provider);
-    });
-  }
 }
 
 function logout(){
@@ -659,11 +663,15 @@ function initAuth(){
   if(ldr) ldr.style.display='flex';
   if(loginScreen) loginScreen.style.display='none';
 
-  // Handle redirect result after returning from Google login
+  // Handle redirect result (for Safari/WebView fallback)
   auth.getRedirectResult().then(function(result){
-    // Redirect result handled by onAuthStateChanged below
+    if(result && result.user){
+      console.log('Redirect login successful:', result.user.email);
+    }
   }).catch(function(e){
-    console.error('Redirect error:', e);
+    if(e.code !== 'auth/no-auth-event'){
+      console.error('Redirect error:', e.code, e.message);
+    }
   });
 
   auth.onAuthStateChanged(function(user){
