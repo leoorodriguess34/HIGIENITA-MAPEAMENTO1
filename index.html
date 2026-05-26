@@ -194,6 +194,12 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
 .est-warn{color:var(--amber);font-weight:600}
 .est-ok{color:var(--accent);font-weight:600}
 .diff-badge{font-size:10px;padding:2px 8px;border-radius:20px;font-family:'DM Mono',monospace;display:inline-block}
+.est-chip{display:inline-block;border-radius:20px;border:1px solid var(--bdr2);background:var(--surface2);padding:2px 8px;font-size:10px;font-weight:700;color:var(--text3);margin-top:4px;margin-right:4px;text-transform:uppercase}
+.est-chip.ok{border-color:rgba(0,192,127,.3);background:var(--accent-lt);color:var(--accent-dk)}
+.est-chip.warn{border-color:rgba(245,158,11,.35);background:var(--amber-lt);color:var(--amber)}
+.est-chip.bad{border-color:rgba(239,68,68,.3);background:var(--red-lt);color:var(--red)}
+.est-loc-line{font-size:11px;color:var(--text3);line-height:1.35}
+.est-loc-line strong{color:var(--text2);font-weight:700}
 /* Product detail panel */
 .est-detail{background:var(--bg);border:1px solid var(--bdr);border-radius:var(--r);padding:20px;margin-bottom:12px;display:none}
 .est-detail.active{display:block}
@@ -359,6 +365,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
           <button onclick="setEstView('simples')" id="ev-simples" class="btn" style="padding:5px 12px;font-size:12px;border-radius:4px;background:transparent;color:var(--text3)">Simples</button>
           <button onclick="setEstView('kits')" id="ev-kits" class="btn" style="padding:5px 12px;font-size:12px;border-radius:4px;background:transparent;color:var(--text3)">Kits</button>
           <button onclick="setEstView('materia_prima')" id="ev-materia_prima" class="btn" style="padding:5px 12px;font-size:12px;border-radius:4px;background:transparent;color:var(--text3)">Materia-prima</button>
+          <button onclick="setEstView('revisar')" id="ev-revisar" class="btn" style="padding:5px 12px;font-size:12px;border-radius:4px;background:transparent;color:var(--text3)">Revisar</button>
         </div>
         <input id="est-busca" placeholder="Buscar SKU ou produto..." oninput="renderEstoque()" style="background:var(--surface);border:1px solid var(--bdr);border-radius:var(--rs);color:var(--text);padding:7px 12px;font-size:12px;font-family:Sora,sans-serif;outline:none;width:220px">
         <select id="est-sort" onchange="renderEstoque()" style="background:var(--surface);border:1px solid var(--bdr);border-radius:var(--rs);color:var(--text);padding:7px 11px;font-size:12px;font-family:Sora,sans-serif;outline:none">
@@ -1004,9 +1011,52 @@ function getProdutoTipo(p){
   return 'simples';
 }
 
+function getProdutoTinyLoc(p){
+  return (p.loc||p.localizacao||p.localizacao_estoque||p.localizacao_tiny||'').toString().trim();
+}
+
+function getProdutoTipoRaw(p){
+  return (p.tipo_estoque||p.tipo_produto||p.tipo||p.classe_produto||p.classe||'').toString().trim();
+}
+
+function getProdutoTipoInfo(p){
+  if(p.tipo_normalizado&&!p.tipo_estoque){
+    var norm=(p.tipo_normalizado||'simples').toString();
+    var lbl=norm==='materia_prima'?'Materia-prima':norm==='kits'?'Kit':'Simples';
+    return {tipo:norm,label:lbl,origem:p.tipo_oficial?'Tiny':'Inferido',raw:getProdutoTipoRaw(p),oficial:!!p.tipo_oficial};
+  }
+  var raw=getProdutoTipoRaw(p);
+  var rawLower=raw.toLowerCase();
+  var grupo=(p.categoria||p.grupo||'').toString().toLowerCase();
+  var sku=(p.sku||p.codigo||'').toString().toLowerCase();
+  var nome=getProdutoNome(p).toLowerCase();
+  var all=(rawLower+' '+grupo).trim();
+  if(rawLower.includes('materia')||rawLower.includes('matÃ©ria')||rawLower.includes('prima')||rawLower==='mp'||rawLower==='m')return {tipo:'materia_prima',label:'Materia-prima',origem:raw?'Tiny':'Inferido',raw:raw,oficial:!!raw};
+  if(rawLower.includes('kit')||rawLower.includes('composto')||rawLower.includes('composicao')||rawLower.includes('composiÃ§Ã£o')||rawLower==='k')return {tipo:'kits',label:'Kit',origem:raw?'Tiny':'Inferido',raw:raw,oficial:!!raw};
+  if(rawLower.includes('simples')||rawLower.includes('normal')||rawLower==='s'||rawLower==='p')return {tipo:'simples',label:'Simples',origem:'Tiny',raw:raw,oficial:true};
+  if(all.includes('materia')||all.includes('matÃ©ria')||all.includes('prima'))return {tipo:'materia_prima',label:'Materia-prima',origem:raw?'Tiny':'Grupo',raw:raw||p.categoria||p.grupo||'',oficial:!!raw};
+  if(all.includes('kit')||all.includes('composto')||all.includes('composicao')||all.includes('composiÃ§Ã£o'))return {tipo:'kits',label:'Kit',origem:raw?'Tiny':'Grupo',raw:raw||p.categoria||p.grupo||'',oficial:!!raw};
+  if(sku.includes('kit')||nome.startsWith('kit ')||nome.includes(' kit '))return {tipo:'kits',label:'Kit',origem:'Inferido',raw:'SKU/nome',oficial:false};
+  if(sku.includes('mp')||nome.includes('materia prima')||nome.includes('matÃ©ria prima'))return {tipo:'materia_prima',label:'Materia-prima',origem:'Inferido',raw:'SKU/nome',oficial:false};
+  return {tipo:'simples',label:'Simples',origem:raw?'Tiny':'Padrao WMS',raw:raw||'',oficial:!!raw};
+}
+
+function getProdutoTipo(p){
+  return getProdutoTipoInfo(p).tipo;
+}
+
+function precisaRevisaoProduto(p){
+  var sku=(p.sku||p.codigo||'').toString().trim();
+  var nome=getProdutoNome(p);
+  var tipoInfo=getProdutoTipoInfo(p);
+  var semNome=!nome||nome==='Nome nao informado no Tiny'||nome.toUpperCase()===sku.toUpperCase();
+  var semLoc=!getProdutoTinyLoc(p)&&getProdutoLocsFromWms(sku).length===0;
+  return semNome||!tipoInfo.oficial||semLoc;
+}
+
 function setEstView(v){
   estView = v;
-  ['todos','simples','kits','materia_prima'].forEach(function(x){
+  ['todos','simples','kits','materia_prima','revisar'].forEach(function(x){
     var btn=document.getElementById('ev-'+x);
     if(btn){btn.style.background=x===v?'var(--primary)':'transparent';btn.style.color=x===v?'#fff':'var(--text3)';}
   });
@@ -1027,6 +1077,7 @@ function renderEstoque(){
   var simples=items.filter(function(p){return getProdutoTipo(p)==='simples';}).length;
   var kits=items.filter(function(p){return getProdutoTipo(p)==='kits';}).length;
   var materiaPrima=items.filter(function(p){return getProdutoTipo(p)==='materia_prima';}).length;
+  var revisar=items.filter(precisaRevisaoProduto).length;
   var diffs=items.filter(function(p){return Math.abs(getWmsQty(p.sku||'')-Number(p.saldo||0))>10;}).length;
   if(sync)sync.innerHTML='<span style="width:7px;height:7px;border-radius:50%;background:var(--accent);display:inline-block"></span>'+total+' produtos Tiny carregados';
   if(metrics)metrics.innerHTML=
@@ -1034,10 +1085,11 @@ function renderEstoque(){
     '<div class="mc"><div class="ml">Simples</div><div class="mv">'+simples+'</div></div>'+
     '<div class="mc"><div class="ml">Kits</div><div class="mv" style="color:var(--primary)">'+kits+'</div></div>'+
     '<div class="mc"><div class="ml">Materia-prima</div><div class="mv">'+materiaPrima+'</div></div>'+
-    '<div class="mc"><div class="ml">Alertas / Dif WMS</div><div class="mv"><span class="est-alert">'+alertas+'</span> <span style="color:var(--primary)">/'+diffs+'</span></div></div>';
+    '<div class="mc"><div class="ml">Revisar / Dif WMS</div><div class="mv"><span class="est-warn">'+revisar+'</span> <span style="color:var(--primary)">/'+diffs+'</span></div></div>';
   items=items.filter(function(p){
     var wms=getWmsQty(p.sku||'');
-    if(estView!=='todos'&&getProdutoTipo(p)!==estView)return false;
+    if(estView==='revisar'&&!precisaRevisaoProduto(p))return false;
+    if(estView!=='todos'&&estView!=='revisar'&&getProdutoTipo(p)!==estView)return false;
     if(busca){
       var hay=((p.sku||'')+' '+getProdutoNome(p)+' '+getProdutoLocLabel(p)).toLowerCase();
       if(hay.indexOf(busca)<0)return false;
@@ -1056,14 +1108,16 @@ function renderEstoque(){
     var wms=getWmsQty(p.sku||'');
     var diff=wms-Number(p.saldo||0);
     var cls=p.alerta?' alerta':Number(p.reservado||0)>0?' reservado-row':Math.abs(diff)>10?' diff-row':'';
-    var tipo=getProdutoTipo(p);
-    var tipoLabel=tipo==='materia_prima'?'Materia-prima':tipo==='kits'?'Kit':'Simples';
-    var locLabel=getProdutoLocLabel(p);
+    var tipoInfo=getProdutoTipoInfo(p);
+    var tinyLoc=getProdutoTinyLoc(p);
+    var wmsLocs=getProdutoLocsFromWms(p.sku||p.codigo||'');
     var sku=p.sku||p.codigo||'';
+    var nome=getProdutoNome(p);
+    var chipClass=tipoInfo.oficial?'ok':(tipoInfo.origem==='Grupo'?'warn':'bad');
     return '<div class="est-row'+cls+'" data-sku="'+escHtml(sku)+'" onclick="openProdutoModal(this.getAttribute(\'data-sku\'))" style="grid-template-columns:100px minmax(260px,1.6fr) minmax(180px,1fr) 54px 70px 74px 82px 82px 62px 78px">'+
       '<span class="est-sku">'+escHtml(sku)+'</span>'+
-      '<span><strong style="color:var(--text)">'+escHtml(getProdutoNome(p))+'</strong><div style="font-size:11px;color:var(--text3);margin-top:3px">'+tipoLabel+'</div></span>'+
-      '<span style="font-size:11px;color:var(--text3);line-height:1.35">'+escHtml(locLabel)+'</span>'+
+      '<span><strong style="color:var(--text)">'+escHtml(nome)+'</strong><div><span class="est-chip '+chipClass+'">'+escHtml(tipoInfo.label)+'</span><span class="est-chip '+(tipoInfo.oficial?'ok':'warn')+'">'+escHtml(tipoInfo.origem)+'</span></div></span>'+
+      '<span><div class="est-loc-line"><strong>Tiny:</strong> '+escHtml(tinyLoc||'--')+'</div><div class="est-loc-line"><strong>WMS:</strong> '+escHtml(wmsLocs.length?wmsLocs.join(', '):'--')+'</div></span>'+
       '<span>'+escHtml(p.un||'')+'</span>'+
       '<span class="est-num">'+Number(p.preco||0).toFixed(2).replace('.',',')+'</span>'+
       '<span class="est-num">'+Number(p.saldo||0)+'</span>'+
@@ -1087,11 +1141,13 @@ function openProdutoModal(sku){
   var p=getProdutoBySku(produtoModalSku);
   var nome=getProdutoNome(p);
   var tipo=getProdutoTipo(p);
+  var tipoInfo=getProdutoTipoInfo(p);
   var wms=getWmsQty(p.sku||produtoModalSku);
   var saldo=Number(p.saldo||0);
   var diff=wms-saldo;
   var wmsLocs=getProdutoLocsFromWms(p.sku||produtoModalSku);
   var eans=getProdutoEans(p.sku||produtoModalSku);
+  var tinyLoc=getProdutoTinyLoc(p);
   document.getElementById('p-sku').textContent=p.sku||produtoModalSku;
   document.getElementById('p-nome').textContent=nome;
   document.getElementById('p-loc').value=p.loc||p.localizacao||p.localizacao_estoque||'';
@@ -1110,9 +1166,10 @@ function openProdutoModal(sku){
         '<div><div class="fl">Diferenca WMS x Tiny</div><div class="'+(diff<0?'est-alert':diff>0?'est-warn':'est-ok')+'" style="font-weight:800;margin-bottom:10px">'+(diff>0?'+':'')+diff+'</div></div>'+
         '<div><div class="fl">Unidade</div><div style="margin-bottom:10px">'+escHtml(p.un||'--')+'</div></div>'+
         '<div><div class="fl">Preco</div><div style="margin-bottom:10px">R$ '+Number(p.preco||0).toFixed(2).replace('.',',')+'</div></div>'+
-        '<div><div class="fl">Tipo detectado</div><div style="margin-bottom:10px">'+(tipo==='materia_prima'?'Materia-prima':tipo==='kits'?'Kit':'Simples')+'</div></div>'+
+        '<div><div class="fl">Tipo no WMS</div><div style="margin-bottom:10px">'+escHtml(tipoInfo.label)+' <span class="est-chip '+(tipoInfo.oficial?'ok':'warn')+'">'+escHtml(tipoInfo.origem)+'</span></div></div>'+
+        '<div><div class="fl">Tipo recebido do Tiny</div><div style="margin-bottom:10px">'+escHtml(tipoInfo.raw||'--')+'</div></div>'+
         '<div><div class="fl">Grupo/Categoria</div><div style="margin-bottom:10px">'+escHtml(p.grupo||p.categoria||'--')+'</div></div>'+
-        '<div><div class="fl">Localizacao Tiny</div><div style="margin-bottom:10px">'+escHtml(p.loc||p.localizacao||p.localizacao_estoque||'--')+'</div></div>'+
+        '<div><div class="fl">Localizacao Tiny</div><div style="margin-bottom:10px">'+escHtml(tinyLoc||'--')+'</div></div>'+
         '<div><div class="fl">Localizacoes WMS preenchidas</div><div style="margin-bottom:10px">'+escHtml(wmsLocs.length?wmsLocs.join(', '):'Nenhum palete preenchido')+'</div></div>'+
       '</div>'+
       '<div style="margin-top:10px"><div class="fl">EANs mapeados</div><div style="font-family:DM Mono,monospace;font-size:12px;color:var(--text2);word-break:break-word">'+escHtml(eans.length?eans.join(', '):'Nenhum EAN mapeado')+'</div></div>'+
@@ -1133,7 +1190,7 @@ function salvarProdutoLocalizacao(){
   var tipo=document.getElementById('p-tipo').value;
   var err=document.getElementById('p-err');
   if(!sku){err.textContent='Produto invalido.';return;}
-  var updates={loc:loc,localizacao:loc,tipo:tipo,tipo_estoque:tipo};
+  var updates={loc:loc,localizacao:loc,tipo_estoque:tipo,tipo_wms:tipo,tipo_normalizado:tipo,tipo_oficial:false};
   rtdb.ref('catalogo/'+key).update(updates).then(function(){
     CATALOGO_INV[key]=Object.assign({},CATALOGO_INV[key]||p,updates,{sku:sku});
     catalogoTiny=CATALOGO_INV;

@@ -20,6 +20,35 @@ FIREBASE_DB_URL = 'https://higienita-f2b22-default-rtdb.firebaseio.com'
 # Tiny permite ~30 req/min, entao 2s entre chamadas = safe
 DELAY_ENTRE_CHAMADAS = 2.5
 
+def first_text(*vals):
+    for val in vals:
+        if val is None:
+            continue
+        txt = str(val).strip()
+        if txt:
+            return txt
+    return ''
+
+def detectar_tipo_produto(prod):
+    raw = first_text(prod.get('tipo_estoque'), prod.get('tipo_produto'), prod.get('tipo'), prod.get('classe_produto'), prod.get('classe'))
+    raw_l = raw.lower()
+    grupo = first_text(prod.get('grupo'), prod.get('categoria')).lower()
+    sku = first_text(prod.get('sku'), prod.get('codigo')).lower()
+    nome = first_text(prod.get('desc'), prod.get('descricao'), prod.get('nome'), prod.get('produto')).lower()
+    base = f'{raw_l} {grupo}'
+
+    if any(x in base for x in ['materia', 'matéria', 'prima']) or raw_l in ['mp', 'm']:
+        return 'materia_prima', bool(raw)
+    if any(x in base for x in ['kit', 'composto', 'composicao', 'composição']) or raw_l == 'k':
+        return 'kits', bool(raw)
+    if raw_l in ['simples', 'normal', 's', 'p'] or 'simples' in raw_l:
+        return 'simples', True
+    if 'kit' in sku or nome.startswith('kit ') or ' kit ' in nome:
+        return 'kits', False
+    if 'mp' in sku or 'materia prima' in nome or 'matéria prima' in nome:
+        return 'materia_prima', False
+    return 'simples', bool(raw)
+
 def init_firebase():
     cred_dict = json.loads(FIREBASE_CRED_JSON)
     cred = credentials.Certificate(cred_dict)
@@ -90,13 +119,28 @@ def buscar_produtos():
         for item in items:
             p = item.get('produto', {})
             if p.get('codigo'):
+                desc = first_text(p.get('descricao'), p.get('nome'), p.get('produto'))
+                tipo = first_text(p.get('tipo_estoque'), p.get('tipo_produto'), p.get('tipo'), p.get('classe_produto'), p.get('classe'))
+                grupo = first_text(p.get('grupo'), p.get('categoria'))
                 produtos.append({
                     'id':  str(p.get('id', '')),
                     'sku': p.get('codigo', ''),
-                    'desc': p.get('descricao', '') or p.get('nome', '') or p.get('produto', ''),
-                    'un':  p.get('unidade', ''),
-                    'tipo': p.get('tipo', '') or p.get('tipo_produto', '') or p.get('classe_produto', '') or p.get('classe', ''),
-                    'grupo': p.get('grupo', '') or p.get('categoria', ''),
+                    'codigo': p.get('codigo', ''),
+                    'desc': desc,
+                    'nome': desc,
+                    'descricao': desc,
+                    'un':  first_text(p.get('unidade'), p.get('un')),
+                    'preco': p.get('preco', p.get('preco_venda', 0)) or 0,
+                    'preco_custo': p.get('preco_custo', 0) or 0,
+                    'tipo': tipo,
+                    'tipo_produto': p.get('tipo_produto', ''),
+                    'classe_produto': p.get('classe_produto', ''),
+                    'grupo': grupo,
+                    'categoria': p.get('categoria', '') or grupo,
+                    'loc': first_text(p.get('localizacao'), p.get('localizacao_estoque'), p.get('loc')),
+                    'localizacao': first_text(p.get('localizacao'), p.get('localizacao_estoque'), p.get('loc')),
+                    'gtin': first_text(p.get('gtin'), p.get('ean'), p.get('codigo_barras')),
+                    'situacao': p.get('situacao', ''),
                 })
         num_paginas = int(data.get('numero_paginas', 1))
         if pagina >= num_paginas:
@@ -243,15 +287,31 @@ def sincronizar():
         
         item = {
             'sku':        p['sku'],
+            'codigo':     p.get('codigo', p['sku']),
+            'id_tiny':    p.get('id', ''),
             'desc':       p['desc'],
+            'nome':       p.get('nome', p['desc']),
+            'descricao':  p.get('descricao', p['desc']),
             'un':         p['un'],
+            'preco':      p.get('preco', 0) or 0,
+            'preco_custo': p.get('preco_custo', 0) or 0,
             'tipo':       p.get('tipo', ''),
+            'tipo_produto': p.get('tipo_produto', ''),
+            'classe_produto': p.get('classe_produto', ''),
             'grupo':      p.get('grupo', ''),
+            'categoria':  p.get('categoria', ''),
+            'loc':        p.get('loc', ''),
+            'localizacao': p.get('localizacao', ''),
+            'gtin':       p.get('gtin', ''),
+            'situacao':   p.get('situacao', ''),
             'disponivel': estoque['disponivel'],
             'reservado':  estoque['reservado'],
             'saldo':      estoque['saldo'],
             'alerta':     estoque['disponivel'] < estoque['reservado']
         }
+        tipo_norm, tipo_oficial = detectar_tipo_produto(item)
+        item['tipo_normalizado'] = tipo_norm
+        item['tipo_oficial'] = tipo_oficial
         catalogo[p['sku']] = item
         
         if item['alerta'] and estoque['reservado'] > 0:
@@ -318,10 +378,25 @@ def sincronizar():
     def sanitize_item(item):
         return {
             'sku':        sanitize_str(item.get('sku', '')),
+            'codigo':     sanitize_str(item.get('codigo', item.get('sku', ''))),
+            'id_tiny':    sanitize_str(item.get('id_tiny', '')),
             'desc':       sanitize_str(item.get('desc', '')),
+            'nome':       sanitize_str(item.get('nome', item.get('desc', ''))),
+            'descricao':  sanitize_str(item.get('descricao', item.get('desc', ''))),
             'un':         sanitize_str(item.get('un', '')),
+            'preco':      float(item.get('preco', 0) or 0),
+            'preco_custo': float(item.get('preco_custo', 0) or 0),
             'tipo':       sanitize_str(item.get('tipo', '')),
+            'tipo_produto': sanitize_str(item.get('tipo_produto', '')),
+            'classe_produto': sanitize_str(item.get('classe_produto', '')),
+            'tipo_normalizado': sanitize_str(item.get('tipo_normalizado', '')),
+            'tipo_oficial': bool(item.get('tipo_oficial', False)),
             'grupo':      sanitize_str(item.get('grupo', '')),
+            'categoria':  sanitize_str(item.get('categoria', '')),
+            'loc':        sanitize_str(item.get('loc', '')),
+            'localizacao': sanitize_str(item.get('localizacao', '')),
+            'gtin':       sanitize_str(item.get('gtin', '')),
+            'situacao':   sanitize_str(item.get('situacao', '')),
             'disponivel': float(item.get('disponivel', 0) or 0),
             'reservado':  float(item.get('reservado', 0) or 0),
             'saldo':      float(item.get('saldo', 0) or 0),
@@ -332,6 +407,43 @@ def sincronizar():
     for k, v in catalogo.items():
         safe_key = sanitize_key(k)
         catalogo_safe[safe_key] = sanitize_item(v)
+
+    auditoria = {
+        'total': len(catalogo_safe),
+        'simples': 0,
+        'kits': 0,
+        'materia_prima': 0,
+        'sem_nome': 0,
+        'sem_tipo_oficial': 0,
+        'sem_localizacao': 0,
+        'revisar': [],
+        'atualizado': agora
+    }
+    for item in catalogo_safe.values():
+        tipo_norm = item.get('tipo_normalizado') or 'simples'
+        if tipo_norm in auditoria:
+            auditoria[tipo_norm] += 1
+        sku = item.get('sku', '')
+        nome = item.get('desc', '') or item.get('nome', '')
+        sem_nome = (not nome) or (nome.upper() == sku.upper())
+        sem_tipo = not item.get('tipo_oficial', False)
+        sem_loc = not (item.get('loc') or item.get('localizacao'))
+        if sem_nome:
+            auditoria['sem_nome'] += 1
+        if sem_tipo:
+            auditoria['sem_tipo_oficial'] += 1
+        if sem_loc:
+            auditoria['sem_localizacao'] += 1
+        if sem_nome or sem_tipo or sem_loc:
+            auditoria['revisar'].append({
+                'sku': sku,
+                'desc': nome,
+                'tipo': tipo_norm,
+                'sem_nome': sem_nome,
+                'sem_tipo_oficial': sem_tipo,
+                'sem_localizacao': sem_loc,
+            })
+    auditoria['revisar'] = auditoria['revisar'][:300]
 
     # Save in chunks of 200 to avoid large payload issues
     # Salva em chunks pequenos de 50 produtos para evitar limite de 10MB
@@ -354,6 +466,8 @@ def sincronizar():
                     print(f'    Ignorando SKU {k}: {e2}')
         time.sleep(0.5)  # Pequena pausa entre chunks
     print(f'  catalogo completo: {len(catalogo_safe)} produtos')
+    ref.child('catalogo_meta').set(auditoria)
+    print(f"  auditoria catalogo: simples={auditoria['simples']} kits={auditoria['kits']} revisar={len(auditoria['revisar'])}")
     
     ref.child('alertas_estoque').set({
         'items': alertas,
