@@ -291,6 +291,26 @@ def sincronizar():
         # Remove control chars and problematic Unicode
         return val.encode('ascii', 'ignore').decode('ascii').strip()
 
+    def detectar_plataforma(canal):
+        c = sanitize_str(str(canal or '')).lower()
+        if not c:
+            return 'outros'
+        if 'mercado' in c or 'mercadolivre' in c or 'meli' in c or c.startswith('ml'):
+            return 'Mercado Livre'
+        if 'shopee' in c:
+            return 'Shopee'
+        if 'magalu' in c or 'magazine' in c or 'luiza' in c:
+            return 'Magalu'
+        if 'amazon' in c:
+            return 'Amazon'
+        if 'tiktok' in c or 'tik tok' in c:
+            return 'TikTok'
+        if 'americanas' in c or 'b2w' in c:
+            return 'Americanas'
+        if 'condominio' in c or 'condom' in c or 'b2b' in c or 'atacado' in c:
+            return 'Condominio'
+        return sanitize_str(canal) or 'outros'
+
     def sanitize_item(item):
         return {
             'sku':        sanitize_str(item.get('sku', '')),
@@ -364,12 +384,14 @@ def sincronizar():
         canal_raw = str(p.get('canal','') or p.get('ecommerce','') or '')
         pedidos_wms[num] = {
             'numero':  num,
+            'id_tiny': str(p.get('id','') or ''),
             'cliente': str(p.get('cliente','') or p.get('nome_contato','')).encode('ascii','ignore').decode('ascii')[:60],
             'valor':   float(p.get('valor',0) or 0),
             'data':    str(p.get('data','') or p.get('data_pedido','')),
             'status':  'pendente',
             'origem':  'tiny',
             'canal':   canal_raw.encode('ascii','ignore').decode('ascii').strip()[:40],
+            'plataforma': detectar_plataforma(canal_raw),
             'itens':   itens_clean,
             'ts':      int(datetime.datetime.now().timestamp() * 1000),
         }

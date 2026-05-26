@@ -457,14 +457,14 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
     </div>
     <!-- Platform filters -->
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
-      <button onclick="setSepPlat('')" id="sp-all" style="padding:4px 14px;border-radius:20px;border:1.5px solid var(--primary);background:var(--primary);color:#fff;font-size:12px;font-weight:700;cursor:pointer;transition:opacity .15s">Todas</button>
-      <button onclick="setSepPlat('Mercado Livre')" style="padding:4px 14px;border-radius:20px;border:1.5px solid #c8a800;background:#FFE600;color:#333;font-size:12px;font-weight:700;cursor:pointer;transition:opacity .15s">Mercado Livre</button>
-      <button onclick="setSepPlat('Shopee')" style="padding:4px 14px;border-radius:20px;border:1.5px solid #c03e24;background:#EE4D2D;color:#fff;font-size:12px;font-weight:700;cursor:pointer;transition:opacity .15s">Shopee</button>
-      <button onclick="setSepPlat('Magalu')" style="padding:4px 14px;border-radius:20px;border:1.5px solid #990000;background:#CC0000;color:#fff;font-size:12px;font-weight:700;cursor:pointer;transition:opacity .15s">Magalu</button>
-      <button onclick="setSepPlat('Amazon')" style="padding:4px 14px;border-radius:20px;border:1.5px solid #cc7a00;background:#FF9900;color:#333;font-size:12px;font-weight:700;cursor:pointer;transition:opacity .15s">Amazon</button>
-      <button onclick="setSepPlat('TikTok')" style="padding:4px 14px;border-radius:20px;border:1.5px solid #333;background:#010101;color:#fff;font-size:12px;font-weight:700;cursor:pointer;transition:opacity .15s">TikTok</button>
-      <button onclick="setSepPlat('Condominio')" style="padding:4px 14px;border-radius:20px;border:1.5px solid var(--primary-dk);background:var(--primary-dk);color:#fff;font-size:12px;font-weight:700;cursor:pointer;transition:opacity .15s">Condominio/B2B</button>
-      <button onclick="setSepPlat('outros')" style="padding:4px 14px;border-radius:20px;border:1.5px solid var(--bdr2);background:var(--surface3);color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;transition:opacity .15s">Outros</button>
+      <button data-sep-plat="" onclick="setSepPlat('')" id="sp-all" style="padding:4px 14px;border-radius:20px;border:1.5px solid var(--primary);background:var(--primary);color:#fff;font-size:12px;font-weight:700;cursor:pointer;transition:opacity .15s">Todas</button>
+      <button data-sep-plat="Mercado Livre" onclick="setSepPlat('Mercado Livre')" style="padding:4px 14px;border-radius:20px;border:1.5px solid #c8a800;background:#FFE600;color:#333;font-size:12px;font-weight:700;cursor:pointer;transition:opacity .15s">Mercado Livre</button>
+      <button data-sep-plat="Shopee" onclick="setSepPlat('Shopee')" style="padding:4px 14px;border-radius:20px;border:1.5px solid #c03e24;background:#EE4D2D;color:#fff;font-size:12px;font-weight:700;cursor:pointer;transition:opacity .15s">Shopee</button>
+      <button data-sep-plat="Magalu" onclick="setSepPlat('Magalu')" style="padding:4px 14px;border-radius:20px;border:1.5px solid #990000;background:#CC0000;color:#fff;font-size:12px;font-weight:700;cursor:pointer;transition:opacity .15s">Magalu</button>
+      <button data-sep-plat="Amazon" onclick="setSepPlat('Amazon')" style="padding:4px 14px;border-radius:20px;border:1.5px solid #cc7a00;background:#FF9900;color:#333;font-size:12px;font-weight:700;cursor:pointer;transition:opacity .15s">Amazon</button>
+      <button data-sep-plat="TikTok" onclick="setSepPlat('TikTok')" style="padding:4px 14px;border-radius:20px;border:1.5px solid #333;background:#010101;color:#fff;font-size:12px;font-weight:700;cursor:pointer;transition:opacity .15s">TikTok</button>
+      <button data-sep-plat="Condominio" onclick="setSepPlat('Condominio')" style="padding:4px 14px;border-radius:20px;border:1.5px solid var(--primary-dk);background:var(--primary-dk);color:#fff;font-size:12px;font-weight:700;cursor:pointer;transition:opacity .15s">Condominio/B2B</button>
+      <button data-sep-plat="outros" onclick="setSepPlat('outros')" style="padding:4px 14px;border-radius:20px;border:1.5px solid var(--bdr2);background:var(--surface3);color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;transition:opacity .15s">Outros/Sem canal</button>
     </div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px;margin-bottom:14px" id="sep-metrics"></div>
     <div id="sep-lista"></div>
@@ -661,19 +661,28 @@ var rtdb = firebase.database();
 
 function setSepPlat(plat){
   sepPlat = plat;
+  document.querySelectorAll('[data-sep-plat]').forEach(function(btn){
+    var active=btn.getAttribute('data-sep-plat')===plat;
+    btn.style.opacity=active?'1':'.58';
+    btn.style.boxShadow=active?'0 0 0 2px rgba(15,163,200,.18)':'none';
+  });
   renderSeparacao();
+}
+
+function getPedidoCanal(p){
+  return (p&&(p.plataforma||p.canal||p.marketplace||p.origem_marketplace||p.ecommerce||p.nome_loja||p.loja||p.tags))||'';
 }
 
 function getPlatform(canal){
   if(!canal) return 'outros';
   var c = canal.toLowerCase();
-  if(c.includes('mercado') || c.includes('meli') || c.includes(' ml') || c.startsWith('ml')) return 'Mercado Livre';
+  if(c.includes('mercado') || c.includes('mercadolivre') || c.includes('meli') || c.includes(' ml') || c.startsWith('ml')) return 'Mercado Livre';
   if(c.includes('shopee')) return 'Shopee';
-  if(c.includes('magalu') || c.includes('magazine')) return 'Magalu';
+  if(c.includes('magalu') || c.includes('magazine') || c.includes('luiza')) return 'Magalu';
   if(c.includes('amazon')) return 'Amazon';
-  if(c.includes('tiktok')) return 'TikTok';
+  if(c.includes('tiktok') || c.includes('tik tok')) return 'TikTok';
   if(c.includes('americanas') || c.includes('b2w')) return 'Americanas';
-  if(c.includes('condominio') || c.includes('b2b') || c.includes('atacado')) return 'Condominio';
+  if(c.includes('condominio') || c.includes('condom') || c.includes('b2b') || c.includes('atacado')) return 'Condominio';
   return canal || 'outros';
 }
 
@@ -849,6 +858,27 @@ function injectTiny(){
 function loadCatalogoTiny(){
   catalogoTiny = CATALOGO_INV || {};
   window.catalogoTiny = catalogoTiny;
+  var sync=document.getElementById('sync-status');
+  if(sync)sync.innerHTML='<span style="width:7px;height:7px;border-radius:50%;background:var(--amber);display:inline-block"></span>Carregando estoque Tiny do Firebase...';
+  if(!rtdb)return catalogoTiny;
+  rtdb.ref('catalogo').once('value',function(snap){
+    var val=snap.val();
+    if(val&&Object.keys(val).length){
+      CATALOGO_INV=val;
+      catalogoTiny=val;
+      window.catalogoTiny=catalogoTiny;
+      if(sync)sync.innerHTML='<span style="width:7px;height:7px;border-radius:50%;background:var(--accent);display:inline-block"></span>'+Object.keys(val).length+' produtos Tiny sincronizados';
+      renderEstoque();
+      renderAlertas();
+    }else{
+      if(sync)sync.innerHTML='<span style="width:7px;height:7px;border-radius:50%;background:var(--amber);display:inline-block"></span>Usando estoque Tiny embutido';
+      renderEstoque();
+    }
+  },function(err){
+    if(sync)sync.innerHTML='<span style="width:7px;height:7px;border-radius:50%;background:var(--red);display:inline-block"></span>Falha no Firebase; usando estoque embutido';
+    console.warn('Erro ao carregar catalogo Tiny:',err);
+    renderEstoque();
+  });
   return catalogoTiny;
 }
 
@@ -1401,7 +1431,8 @@ function novosPedidosTiny(){
       var num=p.numero||p.id||('IMP'+i);
       var itens=p.itens||[];
       if(itens&&!Array.isArray(itens))itens=Object.values(itens);
-      updates['pedidos/'+num]={numero:num,cliente:p.cliente||p.nome_contato||'',valor:p.valor||0,data:p.data||p.data_pedido||'',status:'pendente',origem:'tiny',canal:p.canal||'',itens:itens,ts:Date.now()};
+      var canal=getPedidoCanal(p);
+      updates['pedidos/'+num]={numero:num,id_tiny:p.id||p.id_tiny||'',cliente:p.cliente||p.nome_contato||'',valor:p.valor||0,data:p.data||p.data_pedido||'',status:'pendente',origem:'tiny',canal:canal,plataforma:getPlatform(canal),itens:itens,ts:Date.now()};
       count++;
     });
     if(count>0){rtdb.ref('/').update(updates).then(function(){toast(count+' pedidos importados!',true);renderSeparacao();});}
@@ -1424,9 +1455,10 @@ function renderSeparacao(){
     var pendentes=todos.filter(function(p){return p.status==='pendente';}).length;
     var emSep=todos.filter(function(p){return p.status==='em_separacao';}).length;
     var concluidos=todos.filter(function(p){return p.status==='concluido';}).length;
-    var mlCount=todos.filter(function(p){return getPlatform(p.canal||'')==='Mercado Livre';}).length;
-    var spCount=todos.filter(function(p){return getPlatform(p.canal||'')==='Shopee';}).length;
-    var cdCount=todos.filter(function(p){return getPlatform(p.canal||'')==='Condominio';}).length;
+    var mlCount=todos.filter(function(p){return getPlatform(getPedidoCanal(p))==='Mercado Livre';}).length;
+    var spCount=todos.filter(function(p){return getPlatform(getPedidoCanal(p))==='Shopee';}).length;
+    var cdCount=todos.filter(function(p){return getPlatform(getPedidoCanal(p))==='Condominio';}).length;
+    var outrosCount=todos.filter(function(p){var plat=getPlatform(getPedidoCanal(p));return!['Mercado Livre','Shopee','Magalu','Amazon','TikTok','Americanas','Condominio'].includes(plat);}).length;
     if(metrics)metrics.innerHTML=
       '<div class="mc"><div class="ml">Total</div><div class="mv">'+todos.length+'</div></div>'+
       '<div class="mc"><div class="ml">Pendentes</div><div class="mv est-warn">'+pendentes+'</div></div>'+
@@ -1434,12 +1466,13 @@ function renderSeparacao(){
       '<div class="mc"><div class="ml">Concluidos</div><div class="mv est-ok">'+concluidos+'</div></div>'+
       '<div class="mc"><div class="ml" style="color:#c8a800">Mercado Livre</div><div class="mv" style="color:#c8a800">'+mlCount+'</div></div>'+
       '<div class="mc"><div class="ml" style="color:#EE4D2D">Shopee</div><div class="mv" style="color:#EE4D2D">'+spCount+'</div></div>'+
-      '<div class="mc"><div class="ml" style="color:var(--primary)">Condominio</div><div class="mv" style="color:var(--primary)">'+cdCount+'</div></div>';
+      '<div class="mc"><div class="ml" style="color:var(--primary)">Condominio</div><div class="mv" style="color:var(--primary)">'+cdCount+'</div></div>'+
+      '<div class="mc"><div class="ml">Outros/Sem canal</div><div class="mv">'+outrosCount+'</div></div>';
 
     var filtered=todos.filter(function(p){
       if(p.status!==sepView)return false;
       if(!sepPlat)return true;
-      var plat=getPlatform(p.canal||'');
+      var plat=getPlatform(getPedidoCanal(p));
       if(sepPlat==='outros')return!['Mercado Livre','Shopee','Magalu','Amazon','TikTok','Americanas','Condominio'].includes(plat);
       return plat===sepPlat;
     });
@@ -1449,6 +1482,10 @@ function renderSeparacao(){
     lista.innerHTML=filtered.map(function(p){
       var statusColor=p.status==='pendente'?'var(--amber)':p.status==='em_separacao'?'var(--primary)':'var(--accent)';
       var badgeBg=p.status==='pendente'?'var(--amber-lt)':p.status==='em_separacao'?'var(--primary-lt)':'var(--accent-lt)';
+      var rawCanal=getPedidoCanal(p);
+      var plataforma=getPlatform(rawCanal);
+      var origem=(p.origem||'tiny').toString().toUpperCase();
+      var tinyId=p.id_tiny||p.tiny_id||p.id||'';
       var itens=p.itens||[];
       if(itens&&!Array.isArray(itens))itens=Object.values(itens);
       var bipados=p.bipados||{};
@@ -1506,9 +1543,15 @@ function renderSeparacao(){
             '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap">'+
               '<span style="font-size:15px;font-weight:800;color:var(--text)">Pedido #'+p.numero+'</span>'+
               '<span style="font-size:11px;font-weight:700;color:'+statusColor+';background:'+badgeBg+';padding:2px 10px;border-radius:20px">'+p.status+'</span>'+
-              getPlatBadge(p.canal||'')+
+              getPlatBadge(rawCanal)+
             '</div>'+
             '<div style="font-size:12px;color:var(--text3)">'+p.cliente+(p.valor?' | R$ '+Number(p.valor).toFixed(2).replace('.',','):'')+(p.data?' | '+p.data:'')+'</div>'+
+            '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:7px;font-size:11px;color:var(--text3)">'+
+              '<span style="background:var(--surface2);border:1px solid var(--bdr2);border-radius:20px;padding:3px 9px">Origem: '+origem+'</span>'+
+              '<span style="background:var(--surface2);border:1px solid var(--bdr2);border-radius:20px;padding:3px 9px">Plataforma: '+plataforma+'</span>'+
+              '<span style="background:var(--surface2);border:1px solid var(--bdr2);border-radius:20px;padding:3px 9px">Canal Tiny: '+(rawCanal||'nao informado')+'</span>'+
+              (tinyId?'<span style="background:var(--surface2);border:1px solid var(--bdr2);border-radius:20px;padding:3px 9px">ID Tiny: '+tinyId+'</span>':'')+
+            '</div>'+
           '</div>'+actions+
         '</div>'+itensHtml+'</div>';
     }).join('');
