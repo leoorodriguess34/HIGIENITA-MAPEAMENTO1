@@ -655,6 +655,42 @@ var fbConfig = {
 };
 firebase.initializeApp(fbConfig);
 var rtdb = firebase.database();
+
+//  PLATFORM FUNCTIONS (defined early so HTML onclick buttons can call them) 
+
+function setSepPlat(plat){
+  sepPlat = plat;
+  renderSeparacao();
+}
+
+function getPlatform(canal){
+  if(!canal) return 'outros';
+  var c = canal.toLowerCase();
+  if(c.includes('mercado') || c.includes('meli') || c.includes(' ml') || c.startsWith('ml')) return 'Mercado Livre';
+  if(c.includes('shopee')) return 'Shopee';
+  if(c.includes('magalu') || c.includes('magazine')) return 'Magalu';
+  if(c.includes('amazon')) return 'Amazon';
+  if(c.includes('tiktok')) return 'TikTok';
+  if(c.includes('americanas') || c.includes('b2w')) return 'Americanas';
+  if(c.includes('condominio') || c.includes('b2b') || c.includes('atacado')) return 'Condominio';
+  return canal || 'outros';
+}
+
+function getPlatBadge(canal){
+  var plat = getPlatform(canal);
+  var styles = {
+    'Mercado Livre': 'background:#FFE600;color:#333',
+    'Shopee':        'background:#EE4D2D;color:#fff',
+    'Magalu':        'background:#CC0000;color:#fff',
+    'Amazon':        'background:#FF9900;color:#333',
+    'TikTok':        'background:#010101;color:#fff',
+    'Americanas':    'background:#E60014;color:#fff',
+    'Condominio':    'background:#0FA3C8;color:#fff',
+  };
+  var style = styles[plat] || 'background:var(--surface3);color:var(--text2)';
+  return '<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;' + style + '">' + plat + '</span>';
+}
+
 var auth = firebase.auth();
 var currentUser = null;
 
@@ -2521,8 +2557,6 @@ window.showTab = function(name){
     if(el) el.style.display='none';
   });
 };
-</script>var btn = '';
-            if(p.status==='em_separacao'){
-              var pedNum = String(p.numero).replace(/'/g,'');
-              btn = '<button data-p="' + pedNum + '" data-i="' + i + '" data-q="' + it.qtd + '" onclick="biparItemSep(this.getAttribute(\'data-p\'),this.getAttribute(\'data-i\'),this.getAttribute(\'data-q\'))" style="background:none;border:1px solid rgba(0,192,127,.4);border-radius:4px;color:var(--green);font-size:10px;padding:2px 6px;cursor:pointer">' + (ok?'OK':'bipar') + '</button>';
-            }
+</script>
+</body>
+</html>
