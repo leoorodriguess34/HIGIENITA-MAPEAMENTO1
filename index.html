@@ -9,6 +9,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="data/armazem02.js"></script>
 <style>
 :root{
 --primary:#0FA3C8;--primary-dk:#0B8AAB;--primary-lt:#E8F7FB;--primary-mid:#B8E8F4;
@@ -314,6 +315,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
       <textarea id="csvtxt" placeholder="A01,DET001,Detergente 500ml,48"></textarea>
       <div class="br">
         <button class="btn bp" onclick="importCSV()">Importar</button>
+        <button class="btn bp" onclick="aplicarMapaArmazem02()">Aplicar planilha armazem 02</button>
         <button class="btn bs" onclick="document.getElementById('csvtxt').value=gerarTemplate()">Gerar Template</button>
         <button class="btn bs" onclick="exportCSV()">Exportar</button>
       </div>
@@ -883,8 +885,9 @@ function initP(){
 function injectTiny(){
   // Only inject Tiny data if pallet has NO data yet
   // Firebase data will override this in the snapshot handler
-  Object.keys(TINY).forEach(function(a){
-    var prods = TINY[a];
+  var seed = window.ARMAZEM02 || TINY;
+  Object.keys(seed).forEach(function(a){
+    var prods = seed[a];
     if(P[a] && P[a].produtos.length===0){
       P[a].produtos = prods.map(function(v){ return {sku:v.s,desc:v.d,qty:Math.max(0,v.q)}; });
     }
@@ -1533,6 +1536,29 @@ function importCSV(){
   salvarTudo().then(function(){ renderAll(); });
   msg.style.color=errs.length?'#F59E0B':'var(--accent)';
   msg.textContent=ok+' linhas importadas.'+(errs.length?' Erros: '+errs.join('; '):'');
+}
+
+function aplicarMapaArmazem02(){
+  var msg=document.getElementById('imsg');
+  var seed=window.ARMAZEM02||{};
+  var addrs=Object.keys(seed);
+  if(!addrs.length){msg.style.color='var(--red)';msg.textContent='Planilha armazem 02 nao carregada.';return;}
+  addrs.forEach(function(a){
+    if(P[a]){
+      P[a].produtos=(seed[a]||[]).map(function(v){
+        return {sku:v.s||'',desc:v.d||'',qty:parseInt(v.q)||0};
+      });
+    }
+  });
+  salvarTudo().then(function(){
+    renderAll();
+    msg.style.color='var(--accent)';
+    msg.textContent=addrs.length+' enderecos da planilha armazem 02 aplicados no Firebase.';
+    toast('Mapa armazem 02 aplicado!',true);
+  }).catch(function(e){
+    msg.style.color='var(--red)';
+    msg.textContent='Erro ao salvar mapa: '+e.message;
+  });
 }
 
 function gerarTemplate(){
