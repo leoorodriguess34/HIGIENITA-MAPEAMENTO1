@@ -883,6 +883,20 @@ function loadCatalogoTiny(){
 }
 
 var estView = 'todos';
+function getWmsQty(sku){
+  sku=(sku||'').toString().trim().toUpperCase();
+  if(!sku)return 0;
+  var total=0;
+  Object.values(P||{}).forEach(function(palete){
+    (palete.produtos||[]).forEach(function(prod){
+      if((prod.sku||'').toString().trim().toUpperCase()===sku){
+        total+=Number(prod.qty||prod.qtd||0);
+      }
+    });
+  });
+  return total;
+}
+
 function setEstView(v){
   estView = v;
   ['todos','alertas','reservado','diff','zerado'].forEach(function(x){
