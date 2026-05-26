@@ -93,8 +93,10 @@ def buscar_produtos():
                 produtos.append({
                     'id':  str(p.get('id', '')),
                     'sku': p.get('codigo', ''),
-                    'desc': p.get('descricao', ''),
+                    'desc': p.get('descricao', '') or p.get('nome', '') or p.get('produto', ''),
                     'un':  p.get('unidade', ''),
+                    'tipo': p.get('tipo', '') or p.get('tipo_produto', '') or p.get('classe_produto', '') or p.get('classe', ''),
+                    'grupo': p.get('grupo', '') or p.get('categoria', ''),
                 })
         num_paginas = int(data.get('numero_paginas', 1))
         if pagina >= num_paginas:
@@ -243,6 +245,8 @@ def sincronizar():
             'sku':        p['sku'],
             'desc':       p['desc'],
             'un':         p['un'],
+            'tipo':       p.get('tipo', ''),
+            'grupo':      p.get('grupo', ''),
             'disponivel': estoque['disponivel'],
             'reservado':  estoque['reservado'],
             'saldo':      estoque['saldo'],
@@ -316,6 +320,8 @@ def sincronizar():
             'sku':        sanitize_str(item.get('sku', '')),
             'desc':       sanitize_str(item.get('desc', '')),
             'un':         sanitize_str(item.get('un', '')),
+            'tipo':       sanitize_str(item.get('tipo', '')),
+            'grupo':      sanitize_str(item.get('grupo', '')),
             'disponivel': float(item.get('disponivel', 0) or 0),
             'reservado':  float(item.get('reservado', 0) or 0),
             'saldo':      float(item.get('saldo', 0) or 0),

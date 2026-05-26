@@ -356,10 +356,9 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
       <div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">
         <div style="display:flex;gap:2px;background:var(--surface2);border-radius:var(--rs);padding:2px">
           <button onclick="setEstView('todos')" id="ev-todos" class="btn" style="padding:5px 12px;font-size:12px;border-radius:4px;background:var(--green);color:var(--navy)">Todos</button>
-          <button onclick="setEstView('alertas')" id="ev-alertas" class="btn" style="padding:5px 12px;font-size:12px;border-radius:4px;background:transparent;color:var(--text3)">Alertas</button>
-          <button onclick="setEstView('reservado')" id="ev-reservado" class="btn" style="padding:5px 12px;font-size:12px;border-radius:4px;background:transparent;color:var(--text3)">Reservados</button>
-          <button onclick="setEstView('diff')" id="ev-diff" class="btn" style="padding:5px 12px;font-size:12px;border-radius:4px;background:transparent;color:var(--text3)">Dif. WMS</button>
-          <button onclick="setEstView('zerado')" id="ev-zerado" class="btn" style="padding:5px 12px;font-size:12px;border-radius:4px;background:transparent;color:var(--text3)">Zerados</button>
+          <button onclick="setEstView('simples')" id="ev-simples" class="btn" style="padding:5px 12px;font-size:12px;border-radius:4px;background:transparent;color:var(--text3)">Simples</button>
+          <button onclick="setEstView('kits')" id="ev-kits" class="btn" style="padding:5px 12px;font-size:12px;border-radius:4px;background:transparent;color:var(--text3)">Kits</button>
+          <button onclick="setEstView('materia_prima')" id="ev-materia_prima" class="btn" style="padding:5px 12px;font-size:12px;border-radius:4px;background:transparent;color:var(--text3)">Materia-prima</button>
         </div>
         <input id="est-busca" placeholder="Buscar SKU ou produto..." oninput="renderEstoque()" style="background:var(--surface);border:1px solid var(--bdr);border-radius:var(--rs);color:var(--text);padding:7px 12px;font-size:12px;font-family:Sora,sans-serif;outline:none;width:220px">
         <select id="est-sort" onchange="renderEstoque()" style="background:var(--surface);border:1px solid var(--bdr);border-radius:var(--rs);color:var(--text);padding:7px 11px;font-size:12px;font-family:Sora,sans-serif;outline:none">
@@ -897,9 +896,38 @@ function getWmsQty(sku){
   return total;
 }
 
+function getProdutoNome(p){
+  var sku=(p.sku||p.codigo||'').toString();
+  var nome=p.desc||p.descricao||p.nome||p.produto||p.nome_produto||p.title||'';
+  if(nome)return nome;
+  Object.values(EAN_MAP||{}).some(function(e){
+    if((e.s||'').toString().toUpperCase()===sku.toUpperCase()){nome=e.d||'';return true;}
+    return false;
+  });
+  if(nome)return nome;
+  Object.values(P||{}).some(function(palete){
+    return (palete.produtos||[]).some(function(prod){
+      if((prod.sku||'').toString().toUpperCase()===sku.toUpperCase()){nome=prod.desc||prod.descricao||'';return true;}
+      return false;
+    });
+  });
+  return nome||sku||'Produto sem nome';
+}
+
+function getProdutoTipo(p){
+  var raw=(p.tipo_estoque||p.tipo_produto||p.tipo||p.classe_produto||p.classe||p.categoria||p.grupo||'').toString().toLowerCase();
+  var sku=(p.sku||p.codigo||'').toString().toLowerCase();
+  var nome=getProdutoNome(p).toLowerCase();
+  if(raw.includes('materia')||raw.includes('matéria')||raw.includes('prima')||raw==='mp'||raw==='m')return 'materia_prima';
+  if(raw.includes('kit')||raw.includes('composto')||raw.includes('composicao')||raw.includes('composição')||raw==='k')return 'kits';
+  if(sku.includes('kit')||nome.startsWith('kit ')||nome.includes(' kit '))return 'kits';
+  if(sku.includes('mp')||nome.includes('materia prima')||nome.includes('matéria prima'))return 'materia_prima';
+  return 'simples';
+}
+
 function setEstView(v){
   estView = v;
-  ['todos','alertas','reservado','diff','zerado'].forEach(function(x){
+  ['todos','simples','kits','materia_prima'].forEach(function(x){
     var btn=document.getElementById('ev-'+x);
     if(btn){btn.style.background=x===v?'var(--primary)':'transparent';btn.style.color=x===v?'#fff':'var(--text3)';}
   });
@@ -917,24 +945,22 @@ function renderEstoque(){
   var sort=(document.getElementById('est-sort')?document.getElementById('est-sort').value:'sku');
   var total=items.length;
   var alertas=items.filter(function(p){return p.alerta;}).length;
-  var reservados=items.filter(function(p){return Number(p.reservado||0)>0;}).length;
-  var zerados=items.filter(function(p){return Number(p.saldo||0)<=0;}).length;
+  var simples=items.filter(function(p){return getProdutoTipo(p)==='simples';}).length;
+  var kits=items.filter(function(p){return getProdutoTipo(p)==='kits';}).length;
+  var materiaPrima=items.filter(function(p){return getProdutoTipo(p)==='materia_prima';}).length;
   var diffs=items.filter(function(p){return Math.abs(getWmsQty(p.sku||'')-Number(p.saldo||0))>10;}).length;
   if(sync)sync.innerHTML='<span style="width:7px;height:7px;border-radius:50%;background:var(--accent);display:inline-block"></span>'+total+' produtos Tiny carregados';
   if(metrics)metrics.innerHTML=
     '<div class="mc"><div class="ml">Total</div><div class="mv">'+total+'</div></div>'+
-    '<div class="mc"><div class="ml">Alertas</div><div class="mv est-alert">'+alertas+'</div></div>'+
-    '<div class="mc"><div class="ml">Reservados</div><div class="mv est-warn">'+reservados+'</div></div>'+
-    '<div class="mc"><div class="ml">Zerados</div><div class="mv">'+zerados+'</div></div>'+
-    '<div class="mc"><div class="ml">Dif WMS</div><div class="mv" style="color:var(--primary)">'+diffs+'</div></div>';
+    '<div class="mc"><div class="ml">Simples</div><div class="mv">'+simples+'</div></div>'+
+    '<div class="mc"><div class="ml">Kits</div><div class="mv" style="color:var(--primary)">'+kits+'</div></div>'+
+    '<div class="mc"><div class="ml">Materia-prima</div><div class="mv">'+materiaPrima+'</div></div>'+
+    '<div class="mc"><div class="ml">Alertas / Dif WMS</div><div class="mv"><span class="est-alert">'+alertas+'</span> <span style="color:var(--primary)">/'+diffs+'</span></div></div>';
   items=items.filter(function(p){
     var wms=getWmsQty(p.sku||'');
-    if(estView==='alertas'&&!p.alerta)return false;
-    if(estView==='reservado'&&Number(p.reservado||0)<=0)return false;
-    if(estView==='zerado'&&Number(p.saldo||0)>0)return false;
-    if(estView==='diff'&&Math.abs(wms-Number(p.saldo||0))<=10)return false;
+    if(estView!=='todos'&&getProdutoTipo(p)!==estView)return false;
     if(busca){
-      var hay=((p.sku||'')+' '+(p.desc||'')+' '+(p.loc||'')).toLowerCase();
+      var hay=((p.sku||'')+' '+getProdutoNome(p)+' '+(p.loc||p.localizacao||'')).toLowerCase();
       if(hay.indexOf(busca)<0)return false;
     }
     return true;
@@ -943,6 +969,7 @@ function renderEstoque(){
     if(sort==='saldo')return Number(b.saldo||0)-Number(a.saldo||0);
     if(sort==='reservado')return Number(b.reservado||0)-Number(a.reservado||0);
     if(sort==='diff')return Math.abs(getWmsQty(b.sku||'')-Number(b.saldo||0))-Math.abs(getWmsQty(a.sku||'')-Number(a.saldo||0));
+    if(sort==='desc')return getProdutoNome(a).localeCompare(getProdutoNome(b),'pt-BR');
     return String(a[sort]||'').localeCompare(String(b[sort]||''),'pt-BR');
   });
   if(!items.length){body.innerHTML='<div class="empty">Nenhum produto neste filtro.</div>';if(footer)footer.textContent='0 produtos';return;}
@@ -950,9 +977,12 @@ function renderEstoque(){
     var wms=getWmsQty(p.sku||'');
     var diff=wms-Number(p.saldo||0);
     var cls=p.alerta?' alerta':Number(p.reservado||0)>0?' reservado-row':Math.abs(diff)>10?' diff-row':'';
+    var tipo=getProdutoTipo(p);
+    var tipoLabel=tipo==='materia_prima'?'Materia-prima':tipo==='kits'?'Kit':'Simples';
+    var loc=p.loc||p.localizacao||p.localizacao_estoque||'';
     return '<div class="est-row'+cls+'">'+
       '<span class="est-sku">'+(p.sku||'')+'</span>'+
-      '<span>'+(p.desc||'')+'<div style="font-size:11px;color:var(--text3)">'+(p.loc?'Loc: '+p.loc:'Sem locacao')+'</div></span>'+
+      '<span><strong style="color:var(--text)">'+getProdutoNome(p)+'</strong><div style="font-size:11px;color:var(--text3);display:flex;gap:6px;flex-wrap:wrap;margin-top:3px"><span>'+tipoLabel+'</span><span>'+(loc?'Loc: '+loc:'Sem locacao')+'</span></div></span>'+
       '<span>'+(p.un||'')+'</span>'+
       '<span class="est-num">'+Number(p.preco||0).toFixed(2).replace('.',',')+'</span>'+
       '<span class="est-num">'+Number(p.saldo||0)+'</span>'+
