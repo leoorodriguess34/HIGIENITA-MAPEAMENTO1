@@ -311,8 +311,8 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
   <div id="tab-importar" style="display:none">
     <div class="ic">
       <div class="it">Importar via CSV</div>
-      <div class="id">Formato: <code>endereco,sku,produto,quantidade</code> - uma linha por produto.<br>Ex: <code>A01,DET001,Detergente 500ml,48</code></div>
-      <textarea id="csvtxt" placeholder="A01,DET001,Detergente 500ml,48"></textarea>
+      <div class="id">Aceita <code>endereco,corredor,nivel,sku,produto,quantidade</code> ou <code>endereco,sku,produto,quantidade</code>.<br>Linhas sem produto, quantidade zero, PALETES, BANCADA e DEVOLUCAO sao ignoradas.</div>
+      <textarea id="csvtxt" placeholder="A01,A,Chao,,QUIMIVIDA PERCARBONATO LIQUIDO 1L,10"></textarea>
       <div class="br">
         <button class="btn bp" onclick="importCSV()">Importar</button>
         <button class="btn bp" onclick="aplicarMapaArmazem02()">Aplicar planilha armazem 02</button>
@@ -1516,26 +1516,65 @@ function salvarModal(){
 
 function closeModal(){ document.getElementById('mwrap').style.display='none'; sel=null; renderMapa(); }
 
+function parseCSVLine(line){
+  var out=[], cur='', quoted=false;
+  for(var i=0;i<line.length;i++){
+    var ch=line[i];
+    if(ch==='"'){
+      if(quoted&&line[i+1]==='"'){cur+='"';i++;}
+      else quoted=!quoted;
+    }else if(ch===','&&!quoted){out.push(cur);cur='';}
+    else cur+=ch;
+  }
+  out.push(cur);
+  return out;
+}
+
+function csvEscape(v){
+  v=String(v==null?'':v);
+  return /[",\n\r]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;
+}
+
+function csvQty(v){
+  if(v==null||String(v).trim()==='')return 0;
+  var n=Number(String(v).replace(',','.'));
+  return isNaN(n)?0:n;
+}
+
+function produtoIgnoradoCSV(desc){
+  var d=(desc||'').trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  return d==='PALETES'||d==='BANCADA'||d==='DEVOLUCAO';
+}
+
 function importCSV(){
   var raw=document.getElementById('csvtxt').value.trim();
   var msg=document.getElementById('imsg');
   if(!raw){msg.style.color='var(--red)';msg.textContent='Cole o CSV acima.';return;}
   var toAdd={}; var ok=0; var errs=[];
   raw.split('\n').forEach(function(line,i){
-    var parts=line.trim().split(',');
+    if(!line.trim())return;
+    var parts=parseCSVLine(line.trim());
+    if(i===0&&(parts[0]||'').toLowerCase().trim()==='endereco')return;
+    var full=parts.length>=6;
     var a=(parts[0]||'').trim().toUpperCase();
-    var sku=(parts[1]||'').trim();
-    var desc=(parts[2]||'').trim();
-    var qty=parseInt(parts[3])||0;
+    var sku=(parts[full?3:1]||'').trim();
+    var desc=(parts[full?4:2]||'').trim();
+    var qty=csvQty(parts[full?5:3]);
     if(!a||!P[a]){if(a) errs.push('L'+(i+1)+':'+a);return;}
-    if(!sku||!desc){errs.push('L'+(i+1)+':vazio');return;}
+    if(!desc||qty<=0||produtoIgnoradoCSV(desc)){return;}
     if(!toAdd[a]) toAdd[a]=[];
     toAdd[a].push({sku:sku,desc:desc,qty:qty}); ok++;
   });
+  Object.keys(P||{}).forEach(function(a){ P[a].produtos=[]; });
   Object.keys(toAdd).forEach(function(a){ P[a].produtos=toAdd[a]; });
-  salvarTudo().then(function(){ renderAll(); });
-  msg.style.color=errs.length?'#F59E0B':'var(--accent)';
-  msg.textContent=ok+' linhas importadas.'+(errs.length?' Erros: '+errs.join('; '):'');
+  salvarTudo().then(function(){
+    renderAll();
+    msg.style.color=errs.length?'#F59E0B':'var(--accent)';
+    msg.textContent=ok+' linhas importadas e mapa anterior limpo.'+(errs.length?' Erros: '+errs.join('; '):'');
+  }).catch(function(e){
+    msg.style.color='var(--red)';
+    msg.textContent='Erro ao salvar importacao: '+e.message;
+  });
 }
 
 function aplicarMapaArmazem02(){
@@ -1565,7 +1604,7 @@ function aplicarMapaArmazem02(){
 function gerarTemplate(){
   var rows=['endereco,sku,produto,quantidade'];
   Object.values(P).sort(function(a,b){return a.addr.localeCompare(b.addr);}).forEach(function(p){
-    if(p.produtos.length) p.produtos.forEach(function(pr){rows.push(p.addr+','+pr.sku+','+pr.desc+','+pr.qty);});
+    if(p.produtos.length) p.produtos.forEach(function(pr){rows.push([p.addr,pr.sku,pr.desc,pr.qty].map(csvEscape).join(','));});
     else rows.push(p.addr+',,,');
   });
   return rows.join('\n');
@@ -1574,7 +1613,7 @@ function gerarTemplate(){
 function exportCSV(){
   var rows=['endereco,corredor,nivel,sku,produto,quantidade'];
   Object.values(P).sort(function(a,b){return a.addr.localeCompare(b.addr);}).forEach(function(p){
-    if(p.produtos.length) p.produtos.forEach(function(pr){rows.push(p.addr+','+p.cor+','+NL[p.niv-1]+','+pr.sku+',"'+pr.desc+'",'+pr.qty);});
+    if(p.produtos.length) p.produtos.forEach(function(pr){rows.push([p.addr,p.cor,NL[p.niv-1],pr.sku,pr.desc,pr.qty].map(csvEscape).join(','));});
     else rows.push(p.addr+','+p.cor+','+NL[p.niv-1]+',,,');
   });
   var blob=new Blob([rows.join('\n')],{type:'text/csv;charset=utf-8'});
