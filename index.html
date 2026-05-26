@@ -374,8 +374,8 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
     <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:16px" id="est-metrics"></div>
     <!-- Table -->
     <div style="background:var(--surface);border:1px solid var(--bdr);border-radius:var(--r);overflow:hidden">
-      <div style="display:grid;grid-template-columns:90px 1fr 70px 70px 80px 80px 80px 70px 80px;gap:0;background:var(--surface2);padding:10px 14px;font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid var(--bdr)">
-        <span>SKU</span><span>Produto</span><span>UN</span><span>Preco</span><span>Saldo</span><span>Reservado</span><span>Disponivel</span><span>WMS</span><span>Diferenca</span>
+      <div style="display:grid;grid-template-columns:100px minmax(260px,1.6fr) minmax(180px,1fr) 54px 70px 74px 82px 82px 62px 78px;gap:0;background:var(--surface2);padding:10px 14px;font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid var(--bdr)">
+        <span>SKU</span><span>Produto</span><span>Localizacao</span><span>UN</span><span>Preco</span><span>Saldo</span><span>Reservado</span><span>Disponivel</span><span>WMS</span><span>Diferenca</span>
       </div>
       <div id="est-body" style="max-height:560px;overflow-y:auto"></div>
     </div>
@@ -896,22 +896,44 @@ function getWmsQty(sku){
   return total;
 }
 
+function getProdutoLocsFromWms(sku){
+  sku=(sku||'').toString().trim().toUpperCase();
+  var locs=[];
+  Object.values(P||{}).forEach(function(palete){
+    if((palete.produtos||[]).some(function(prod){return (prod.sku||'').toString().trim().toUpperCase()===sku;})){
+      locs.push(palete.addr);
+    }
+  });
+  return locs.sort();
+}
+
 function getProdutoNome(p){
   var sku=(p.sku||p.codigo||'').toString();
   var nome=p.desc||p.descricao||p.nome||p.produto||p.nome_produto||p.title||'';
-  if(nome)return nome;
+  if(nome&&nome.toString().trim().toUpperCase()!==sku.toUpperCase())return nome;
   Object.values(EAN_MAP||{}).some(function(e){
     if((e.s||'').toString().toUpperCase()===sku.toUpperCase()){nome=e.d||'';return true;}
     return false;
   });
-  if(nome)return nome;
+  if(nome&&nome.toString().trim().toUpperCase()!==sku.toUpperCase())return nome;
   Object.values(P||{}).some(function(palete){
     return (palete.produtos||[]).some(function(prod){
       if((prod.sku||'').toString().toUpperCase()===sku.toUpperCase()){nome=prod.desc||prod.descricao||'';return true;}
       return false;
     });
   });
-  return nome||sku||'Produto sem nome';
+  if(nome&&nome.toString().trim().toUpperCase()!==sku.toUpperCase())return nome;
+  return 'Nome nao informado no Tiny';
+}
+
+function getProdutoLocLabel(p){
+  var sku=(p.sku||p.codigo||'').toString();
+  var tinyLoc=(p.loc||p.localizacao||p.localizacao_estoque||'').toString().trim();
+  var wmsLocs=getProdutoLocsFromWms(sku);
+  if(tinyLoc&&wmsLocs.length)return 'Tiny: '+tinyLoc+' | WMS: '+wmsLocs.join(', ');
+  if(wmsLocs.length)return 'WMS: '+wmsLocs.join(', ');
+  if(tinyLoc)return 'Tiny: '+tinyLoc;
+  return 'Sem localizacao';
 }
 
 function getProdutoTipo(p){
@@ -960,7 +982,7 @@ function renderEstoque(){
     var wms=getWmsQty(p.sku||'');
     if(estView!=='todos'&&getProdutoTipo(p)!==estView)return false;
     if(busca){
-      var hay=((p.sku||'')+' '+getProdutoNome(p)+' '+(p.loc||p.localizacao||'')).toLowerCase();
+      var hay=((p.sku||'')+' '+getProdutoNome(p)+' '+getProdutoLocLabel(p)).toLowerCase();
       if(hay.indexOf(busca)<0)return false;
     }
     return true;
@@ -979,10 +1001,11 @@ function renderEstoque(){
     var cls=p.alerta?' alerta':Number(p.reservado||0)>0?' reservado-row':Math.abs(diff)>10?' diff-row':'';
     var tipo=getProdutoTipo(p);
     var tipoLabel=tipo==='materia_prima'?'Materia-prima':tipo==='kits'?'Kit':'Simples';
-    var loc=p.loc||p.localizacao||p.localizacao_estoque||'';
-    return '<div class="est-row'+cls+'">'+
+    var locLabel=getProdutoLocLabel(p);
+    return '<div class="est-row'+cls+'" style="grid-template-columns:100px minmax(260px,1.6fr) minmax(180px,1fr) 54px 70px 74px 82px 82px 62px 78px">'+
       '<span class="est-sku">'+(p.sku||'')+'</span>'+
-      '<span><strong style="color:var(--text)">'+getProdutoNome(p)+'</strong><div style="font-size:11px;color:var(--text3);display:flex;gap:6px;flex-wrap:wrap;margin-top:3px"><span>'+tipoLabel+'</span><span>'+(loc?'Loc: '+loc:'Sem locacao')+'</span></div></span>'+
+      '<span><strong style="color:var(--text)">'+getProdutoNome(p)+'</strong><div style="font-size:11px;color:var(--text3);margin-top:3px">'+tipoLabel+'</div></span>'+
+      '<span style="font-size:11px;color:var(--text3);line-height:1.35">'+locLabel+'</span>'+
       '<span>'+(p.un||'')+'</span>'+
       '<span class="est-num">'+Number(p.preco||0).toFixed(2).replace('.',',')+'</span>'+
       '<span class="est-num">'+Number(p.saldo||0)+'</span>'+
