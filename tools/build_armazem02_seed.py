@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 INDEX = ROOT / "index.html"
 PLANILHA = Path(r"C:\Users\erikh\Downloads\higienita_armazem02.xlsx")
 DATA_DIR = ROOT / "data"
+IGNORE_PRODUCTS = {"PALETES", "BANCADA", "DEVOLUCAO", "DEVOLUÇÃO"}
 
 
 def extract_js_object(source, name):
@@ -102,6 +103,8 @@ def main():
         addr = str(addr).strip().upper()
         produto = str(produto_raw).strip()
         qty = int(float(quantidade or 0))
+        if qty <= 0 or norm(produto) in {norm(p) for p in IGNORE_PRODUCTS}:
+            continue
         sku = str(sku_raw or "").strip()
         source = "planilha"
         score = 100 if sku else 0

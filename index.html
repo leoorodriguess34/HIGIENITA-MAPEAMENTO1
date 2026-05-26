@@ -1543,6 +1543,7 @@ function aplicarMapaArmazem02(){
   var seed=window.ARMAZEM02||{};
   var addrs=Object.keys(seed);
   if(!addrs.length){msg.style.color='var(--red)';msg.textContent='Planilha armazem 02 nao carregada.';return;}
+  Object.keys(P||{}).forEach(function(a){ P[a].produtos=[]; });
   addrs.forEach(function(a){
     if(P[a]){
       P[a].produtos=(seed[a]||[]).map(function(v){
