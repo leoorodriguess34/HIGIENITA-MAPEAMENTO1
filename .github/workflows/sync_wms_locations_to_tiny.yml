@@ -1,0 +1,36 @@
+name: Atualizar localizacoes WMS no Tiny
+
+on:
+  workflow_dispatch:
+    inputs:
+      aplicar:
+        description: 'Digite true para gravar no Tiny. false faz somente simulacao.'
+        required: true
+        default: 'false'
+      limite:
+        description: 'Limite opcional de produtos para testar. 0 = todos.'
+        required: true
+        default: '0'
+
+jobs:
+  sync-localizacoes:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Instalar dependencias
+        run: pip install requests firebase-admin
+
+      - name: Atualizar localizacoes no Tiny
+        env:
+          TINY_TOKEN: ${{ secrets.TINY_TOKEN }}
+          FIREBASE_CREDENTIALS: ${{ secrets.FIREBASE_CREDENTIALS }}
+          UPDATE_TINY_LOCATIONS: ${{ github.event.inputs.aplicar }}
+          TINY_MAX_LOCATION_UPDATES: ${{ github.event.inputs.limite }}
+        run: python sync_wms_locations_to_tiny.py
