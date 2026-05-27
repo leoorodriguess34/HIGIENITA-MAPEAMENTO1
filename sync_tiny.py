@@ -9,17 +9,23 @@ import json
 import time
 import datetime
 import unicodedata
-import requests
-import firebase_admin
-from firebase_admin import credentials, db
 
 # ── CONFIG ──
 TINY_TOKEN = os.environ.get('TINY_TOKEN', '')
 FIREBASE_CRED_JSON = os.environ.get('FIREBASE_CREDENTIALS', '')
 FIREBASE_DB_URL = 'https://higienita-f2b22-default-rtdb.firebaseio.com'
 SYNC_MODE = os.environ.get('SYNC_MODE', 'full').lower()
+ENABLE_TINY_INTEGRATION = os.environ.get('ENABLE_TINY_INTEGRATION', '').lower() == 'true'
 TINY_PEDIDOS_DIAS = int(os.environ.get('TINY_PEDIDOS_DIAS', '30') or 30)
 TINY_PEDIDOS_MAX_PAGINAS = int(os.environ.get('TINY_PEDIDOS_MAX_PAGINAS', '20') or 20)
+
+if __name__ == '__main__' and not ENABLE_TINY_INTEGRATION:
+    print('Integracao Tiny desligada. Nenhuma chamada ao Tiny ou Firebase sera executada.')
+    exit(0)
+
+import requests
+import firebase_admin
+from firebase_admin import credentials, db
 
 # Delay entre chamadas da API Tiny (segundos)
 # Tiny permite ~30 req/min, entao 2s entre chamadas = safe

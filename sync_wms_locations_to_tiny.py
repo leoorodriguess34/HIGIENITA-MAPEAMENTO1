@@ -2,8 +2,11 @@
 """
 Atualiza localizacoes do Tiny ERP a partir do mapa WMS salvo no Firebase.
 
-Por seguranca, roda em modo simulacao por padrao. Para gravar no Tiny:
-UPDATE_TINY_LOCATIONS=true python sync_wms_locations_to_tiny.py
+Integracao desligada por padrao. Para qualquer chamada ao Tiny, defina:
+ENABLE_TINY_WRITEBACK=true
+
+Para gravar no Tiny, alem disso defina:
+UPDATE_TINY_LOCATIONS=true
 """
 
 import json
@@ -12,17 +15,22 @@ import time
 from datetime import datetime
 from xml.etree import ElementTree as ET
 
-import firebase_admin
-import requests
-from firebase_admin import credentials, db
-
 TINY_TOKEN = os.environ.get("TINY_TOKEN", "")
 FIREBASE_CRED_JSON = os.environ.get("FIREBASE_CREDENTIALS", "")
 FIREBASE_DB_URL = "https://higienita-f2b22-default-rtdb.firebaseio.com"
 TINY_BASE = "https://api.tiny.com.br/api2"
+ENABLE_TINY_WRITEBACK = os.environ.get("ENABLE_TINY_WRITEBACK", "").lower() == "true"
 APLICAR = os.environ.get("UPDATE_TINY_LOCATIONS", "false").lower() == "true"
 DELAY = float(os.environ.get("TINY_UPDATE_DELAY", "2.5") or 2.5)
 MAX_UPDATES = int(os.environ.get("TINY_MAX_LOCATION_UPDATES", "0") or 0)
+
+if __name__ == "__main__" and not ENABLE_TINY_WRITEBACK:
+    print("Integracao WMS -> Tiny desligada. Nenhuma chamada ao Tiny ou Firebase sera executada.")
+    raise SystemExit(0)
+
+import firebase_admin
+import requests
+from firebase_admin import credentials, db
 
 
 def first_text(*vals):
