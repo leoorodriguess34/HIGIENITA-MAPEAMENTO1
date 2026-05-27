@@ -2434,25 +2434,26 @@ function ecoPrintRoteiro(){
   var data=new Date().toLocaleString('pt-BR');
   var html='<!doctype html><html><head><meta charset="utf-8"><title>Roteiro de separacao</title>'+
     '<style>'+
-    '@page{size:A4 landscape;margin:7mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#111827;margin:0;font-size:9px}'+
-    '.top{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:1px solid #111827;padding-bottom:5px;margin-bottom:5px}'+
-    'h1{font-size:15px;margin:0 0 3px}.meta{font-size:9px;color:#4b5563}.kpis{display:flex;gap:6px;flex-wrap:wrap}.kpi{border:1px solid #cbd5e1;border-radius:4px;padding:3px 6px;font-weight:700}'+
-    '.corr{margin-bottom:5px;color:#334155}.corr span{display:inline-block;border:1px solid #cbd5e1;border-radius:10px;padding:2px 6px;margin-right:3px;font-weight:700}'+
-    'table{width:100%;border-collapse:collapse;page-break-inside:auto}tr{page-break-inside:avoid;page-break-after:auto}th{background:#e5f5fb;color:#0b7892;font-size:8px;text-align:left;border:1px solid #cbd5e1;padding:3px}td{border:1px solid #d7e0ea;padding:2px 3px;vertical-align:top}'+
-    '.loc{font-size:13px;font-weight:800;color:#0b8aab;white-space:nowrap}.stop td{background:#f1f5f9;font-weight:800}.qtd{font-size:12px;text-align:center;font-weight:800}.chk{width:18px;text-align:center;font-size:13px}.sku{font-family:Consolas,monospace;font-weight:800;color:#0b8aab;white-space:nowrap}.prod{font-weight:700}.sub{color:#64748b;font-size:8px}.pagebreak{break-after:page}'+
+    '@page{size:A4 portrait;margin:5mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#111827;margin:0;font-size:7.4px;line-height:1.1}'+
+    '.top{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:1px solid #111827;padding-bottom:3px;margin-bottom:3px}'+
+    'h1{font-size:12px;margin:0 0 1px}.meta{font-size:7px;color:#4b5563}.kpis{display:flex;gap:3px;flex-wrap:wrap;justify-content:flex-end}.kpi{border:1px solid #cbd5e1;border-radius:3px;padding:2px 4px;font-weight:700}'+
+    '.corr{margin-bottom:3px;color:#334155}.corr span{display:inline-block;border:1px solid #cbd5e1;border-radius:8px;padding:1px 4px;margin-right:2px;font-weight:700}'+
+    '.grid{column-count:2;column-gap:5mm}.stop{break-inside:avoid;border:1px solid #cbd5e1;margin:0 0 3px;background:#fff}.head{display:grid;grid-template-columns:38px 1fr 42px;gap:3px;align-items:center;background:#e5f5fb;border-bottom:1px solid #cbd5e1;padding:2px 3px;font-weight:800;color:#0b7892}'+
+    '.loc{font-size:12px;font-weight:900;color:#0b8aab;white-space:nowrap}.rows{display:block}.row{display:grid;grid-template-columns:13px 48px 1fr 25px;gap:3px;align-items:center;border-top:1px solid #e5e7eb;padding:1px 3px;min-height:15px}.row:first-child{border-top:0}.chk{text-align:center;font-size:10px}.sku{font-family:Consolas,monospace;font-weight:900;color:#0b8aab;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.prod{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.qtd{text-align:center;font-family:Consolas,monospace;font-size:10px;font-weight:900;color:#111827}.obs{color:#64748b;font-size:6.6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'+
     '</style></head><body>'+
     '<div class="top"><div><h1>Higienita - roteiro compacto de separacao</h1><div class="meta">Gerado em '+escHtml(data)+' | Ordem: corredor, coluna e nivel</div></div>'+
     '<div class="kpis"><div class="kpi">'+totalItens+' itens</div><div class="kpi">'+totalUn+' un</div><div class="kpi">'+grupos.length+' paradas</div><div class="kpi">'+semLocal+' sem local</div></div></div>'+
     '<div class="corr">'+Object.keys(corredores).sort().map(function(c){return '<span>Corredor '+c+': '+corredores[c]+'</span>';}).join('')+'</div>'+
-    '<table><thead><tr><th style="width:42px">OK</th><th style="width:70px">Endereco</th><th style="width:74px">SKU</th><th>Produto</th><th style="width:48px">Qtd</th><th style="width:90px">Obs</th></tr></thead><tbody>';
+    '<div class="grid">';
   grupos.forEach(function(g,gi){
-    html+='<tr class="stop"><td></td><td class="loc">'+escHtml(g.addr)+'</td><td colspan="3">Parada '+(gi+1)+'/'+grupos.length+' - '+ecoNivelLabel(g.loc.niv)+' - '+g.itens.length+' itens</td><td>'+g.qtd+' un</td></tr>';
+    html+='<section class="stop"><div class="head"><div class="loc">'+escHtml(g.addr)+'</div><div>Parada '+(gi+1)+'/'+grupos.length+' | '+ecoNivelLabel(g.loc.niv)+' | '+g.itens.length+' itens</div><div>'+g.qtd+' un</div></div><div class="rows">';
     g.itens.forEach(function(it){
       var extra=(it.locs||[]).filter(function(l){return l.addr!==g.addr;}).map(function(l){return l.addr;}).join(', ');
-      html+='<tr><td class="chk">□</td><td class="loc">'+escHtml(g.addr)+'</td><td class="sku">'+escHtml(it.sku)+'</td><td><div class="prod">'+escHtml(it.desc||it.sku)+'</div><div class="sub">'+escHtml(it.match||'')+'</div></td><td class="qtd">'+Number(it.qtd||0)+'</td><td class="sub">'+(extra?'Outros: '+escHtml(extra):'')+'</td></tr>';
+      html+='<div class="row"><div class="chk">[ ]</div><div class="sku">'+escHtml(it.sku)+'</div><div><div class="prod">'+escHtml(it.desc||it.sku)+'</div>'+(extra?'<div class="obs">Outros: '+escHtml(extra)+'</div>':'')+'</div><div class="qtd">'+Number(it.qtd||0)+'</div></div>';
     });
+    html+='</div></section>';
   });
-  html+='</tbody></table></body></html>';
+  html+='</div></body></html>';
   var w=window.open('', '_blank');
   if(!w){toast('Popup bloqueado. Permita popups para imprimir.',false);return;}
   w.document.open();
