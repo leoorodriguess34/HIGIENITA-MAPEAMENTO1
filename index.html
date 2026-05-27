@@ -218,6 +218,16 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
 .eco-pill{display:inline-block;border:1px solid var(--bdr2);background:var(--surface2);border-radius:20px;padding:2px 8px;font-size:10px;font-weight:800;color:var(--text2);margin:2px}
 .eco-check{width:34px;height:34px;border-radius:50%;border:1.5px solid var(--bdr);background:var(--surface2);cursor:pointer;color:var(--text3);font-weight:800}
 .eco-check.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.eco-stop{background:var(--surface);border:1px solid var(--bdr2);border-radius:var(--r);margin-bottom:8px;box-shadow:var(--shadow);overflow:hidden}
+.eco-stop.done{border-color:rgba(0,192,127,.35)}
+.eco-stop-head{display:grid;grid-template-columns:86px 1fr 88px;gap:10px;align-items:center;background:var(--surface2);padding:9px 12px;border-bottom:1px solid var(--bdr2)}
+.eco-stop-loc{font-family:'DM Mono',monospace;font-size:21px;font-weight:800;color:var(--primary)}
+.eco-stop-meta{font-size:11px;color:var(--text3);font-weight:700}
+.eco-row{display:grid;grid-template-columns:34px 92px minmax(180px,1fr) 74px 44px;gap:8px;align-items:center;padding:8px 12px;border-top:1px solid var(--bdr2);font-size:12px}
+.eco-row:first-child{border-top:none}
+.eco-row-sku{font-family:'DM Mono',monospace;font-weight:800;color:var(--primary);font-size:11px}
+.eco-row-prod{font-weight:700;color:var(--text);line-height:1.25}
+.eco-row-qtd{text-align:center;font-family:'DM Mono',monospace;font-size:18px;font-weight:800;color:var(--text)}
 @media(max-width:900px){#tab-separacao-ecommerce>div{grid-template-columns:1fr!important}.ic[style*="sticky"]{position:static!important}}
 /* Op comparison */
 .op-tiny-info{background:rgba(0,192,127,.06);border:1px solid rgba(0,192,127,.2);border-radius:var(--rs);padding:10px 12px;margin-bottom:6px;display:flex;gap:12px;flex-wrap:wrap;align-items:center}
@@ -499,7 +509,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
         <div id="eco-path" style="background:var(--surface);border:1px solid var(--bdr2);border-radius:var(--r);padding:14px;margin-bottom:12px;box-shadow:var(--shadow)"></div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
           <button class="btn bs" onclick="ecoExportCsv()">Exportar CSV</button>
-          <button class="btn bs" onclick="window.print()">Imprimir roteiro</button>
+          <button class="btn bs" onclick="ecoPrintRoteiro()">Imprimir compacto</button>
           <button class="btn bp" onclick="ecoSalvarSeparacao()">Salvar separacao</button>
         </div>
         <div id="eco-rota"></div>
@@ -2280,6 +2290,25 @@ function ecoMontarRota(itens){
   return rota.sort(function(a,b){return a.loc.ord-b.loc.ord||a.sku.localeCompare(b.sku);});
 }
 
+function ecoNivelLabel(niv){
+  return niv<9?NL[niv-1]:'Sem nivel';
+}
+
+function ecoAgruparRota(){
+  var grupos=[];
+  var atual=null;
+  ecoRota.forEach(function(it,idx){
+    var addr=it.loc.addr||'SEM LOCAL';
+    if(!atual||atual.addr!==addr){
+      atual={addr:addr,loc:it.loc,itens:[],qtd:0};
+      grupos.push(atual);
+    }
+    atual.itens.push(Object.assign({idx:idx},it));
+    atual.qtd+=Number(it.qtd||0);
+  });
+  return grupos;
+}
+
 async function ecoLerPdf(file){
   if(!file)return;
   ecoMsg('Lendo PDF...',true);
@@ -2355,19 +2384,29 @@ function renderEcoRota(){
   if(path)path.innerHTML=total?
     '<div style="font-size:11px;color:var(--text3);font-weight:800;text-transform:uppercase;margin-bottom:8px">Caminho sugerido</div>'+
     '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">'+Object.keys(corredores).sort().map(function(c){return '<span class="eco-pill">Corredor '+c+': '+corredores[c]+' paradas</span>';}).join('')+'</div>'+
-    '<div style="font-size:12px;color:var(--text2);line-height:1.7">'+locs.filter(function(v,i,a){return a.indexOf(v)===i;}).slice(0,80).map(function(l){return '<strong style="color:var(--primary)">'+l+'</strong>';}).join(' -> ')+'</div>'
+    '<div style="font-size:12px;color:var(--text2);line-height:1.7">'+locs.filter(function(v,i,a){return a.indexOf(v)===i;}).slice(0,35).map(function(l){return '<strong style="color:var(--primary)">'+l+'</strong>';}).join(' -> ')+(Array.from(new Set(locs)).length>35?' -> ...':'')+'</div>'
     :'<div class="empty" style="padding:18px">Carregue uma lista para gerar o caminho.</div>';
   if(!total){body.innerHTML='<div class="empty">Nenhum roteiro gerado ainda.</div>';return;}
-  body.innerHTML=ecoRota.map(function(it,idx){
-    var done=!!ecoChecks[idx];
-    var locs=(it.locs||[]).map(function(l){return '<span class="eco-pill">'+l.addr+' '+l.origem+(l.qty?' '+l.qty+'un':'')+'</span>';}).join('');
-    return '<div class="eco-step '+(done?'done':'')+'">'+
-      '<div style="display:grid;grid-template-columns:88px 1fr 84px 44px;gap:10px;align-items:center;padding:13px 14px">'+
-        '<div><div class="eco-loc">'+escHtml(it.loc.addr)+'</div><div class="eco-sub">'+(it.loc.niv<9?NL[it.loc.niv-1]:'Sem nivel')+'</div></div>'+
-        '<div><div class="eco-prod">'+escHtml(it.desc||it.sku)+'</div><div class="eco-sub"><strong>'+escHtml(it.sku)+'</strong> | '+escHtml(it.match||'Reconhecido')+'</div><div style="margin-top:5px">'+(locs||'<span class="eco-pill" style="color:var(--red)">Sem localizacao no WMS/Tiny</span>')+'</div></div>'+
-        '<div style="text-align:center"><div class="eco-sub">Coletar</div><div style="font-family:DM Mono,monospace;font-size:22px;font-weight:800;color:var(--text)">'+Number(it.qtd||0)+'</div></div>'+
-        '<button class="eco-check '+(done?'on':'')+'" onclick="ecoToggle('+idx+')">'+(done?'OK':'')+'</button>'+
+  var grupos=ecoAgruparRota();
+  body.innerHTML=grupos.map(function(g,gi){
+    var allDone=g.itens.every(function(it){return !!ecoChecks[it.idx];});
+    return '<div class="eco-stop '+(allDone?'done':'')+'">'+
+      '<div class="eco-stop-head">'+
+        '<div><div class="eco-stop-loc">'+escHtml(g.addr)+'</div><div class="eco-stop-meta">'+ecoNivelLabel(g.loc.niv)+'</div></div>'+
+        '<div><div style="font-size:13px;font-weight:800;color:var(--text)">Parada '+(gi+1)+' de '+grupos.length+'</div><div class="eco-stop-meta">'+g.itens.length+' itens | '+g.qtd+' unidades</div></div>'+
+        '<div style="text-align:right"><span class="eco-pill">'+(allDone?'Conferido':'Pendente')+'</span></div>'+
       '</div>'+
+      '<div>'+g.itens.map(function(it){
+        var done=!!ecoChecks[it.idx];
+        var extraLocs=(it.locs||[]).filter(function(l){return l.addr!==g.addr;}).map(function(l){return l.addr;}).join(', ');
+        return '<div class="eco-row">'+
+          '<button class="eco-check '+(done?'on':'')+'" onclick="ecoToggle('+it.idx+')">'+(done?'OK':'')+'</button>'+
+          '<div class="eco-row-sku">'+escHtml(it.sku)+'</div>'+
+          '<div><div class="eco-row-prod">'+escHtml(it.desc||it.sku)+'</div><div class="eco-sub">'+escHtml(it.match||'Reconhecido')+(extraLocs?' | outros: '+escHtml(extraLocs):'')+'</div></div>'+
+          '<div class="eco-row-qtd">'+Number(it.qtd||0)+'</div>'+
+          '<div class="eco-sub">un</div>'+
+        '</div>';
+      }).join('')+'</div>'+
     '</div>';
   }).join('');
 }
@@ -2382,6 +2421,45 @@ function ecoLimpar(){
   var t=document.getElementById('eco-texto'), f=document.getElementById('eco-pdf');
   if(t)t.value='';if(f)f.value='';
   renderEcoRota();ecoMsg('',true);
+}
+
+function ecoPrintRoteiro(){
+  if(!ecoRota.length){toast('Gere um roteiro primeiro.',false);return;}
+  var grupos=ecoAgruparRota();
+  var totalItens=ecoRota.length;
+  var totalUn=ecoRota.reduce(function(a,i){return a+Number(i.qtd||0);},0);
+  var semLocal=ecoRota.filter(function(i){return !i.ok;}).length;
+  var corredores={};
+  ecoRota.forEach(function(i){if(i.ok)corredores[i.loc.cor]=(corredores[i.loc.cor]||0)+1;});
+  var data=new Date().toLocaleString('pt-BR');
+  var html='<!doctype html><html><head><meta charset="utf-8"><title>Roteiro de separacao</title>'+
+    '<style>'+
+    '@page{size:A4 landscape;margin:7mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#111827;margin:0;font-size:9px}'+
+    '.top{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:1px solid #111827;padding-bottom:5px;margin-bottom:5px}'+
+    'h1{font-size:15px;margin:0 0 3px}.meta{font-size:9px;color:#4b5563}.kpis{display:flex;gap:6px;flex-wrap:wrap}.kpi{border:1px solid #cbd5e1;border-radius:4px;padding:3px 6px;font-weight:700}'+
+    '.corr{margin-bottom:5px;color:#334155}.corr span{display:inline-block;border:1px solid #cbd5e1;border-radius:10px;padding:2px 6px;margin-right:3px;font-weight:700}'+
+    'table{width:100%;border-collapse:collapse;page-break-inside:auto}tr{page-break-inside:avoid;page-break-after:auto}th{background:#e5f5fb;color:#0b7892;font-size:8px;text-align:left;border:1px solid #cbd5e1;padding:3px}td{border:1px solid #d7e0ea;padding:2px 3px;vertical-align:top}'+
+    '.loc{font-size:13px;font-weight:800;color:#0b8aab;white-space:nowrap}.stop td{background:#f1f5f9;font-weight:800}.qtd{font-size:12px;text-align:center;font-weight:800}.chk{width:18px;text-align:center;font-size:13px}.sku{font-family:Consolas,monospace;font-weight:800;color:#0b8aab;white-space:nowrap}.prod{font-weight:700}.sub{color:#64748b;font-size:8px}.pagebreak{break-after:page}'+
+    '</style></head><body>'+
+    '<div class="top"><div><h1>Higienita - roteiro compacto de separacao</h1><div class="meta">Gerado em '+escHtml(data)+' | Ordem: corredor, coluna e nivel</div></div>'+
+    '<div class="kpis"><div class="kpi">'+totalItens+' itens</div><div class="kpi">'+totalUn+' un</div><div class="kpi">'+grupos.length+' paradas</div><div class="kpi">'+semLocal+' sem local</div></div></div>'+
+    '<div class="corr">'+Object.keys(corredores).sort().map(function(c){return '<span>Corredor '+c+': '+corredores[c]+'</span>';}).join('')+'</div>'+
+    '<table><thead><tr><th style="width:42px">OK</th><th style="width:70px">Endereco</th><th style="width:74px">SKU</th><th>Produto</th><th style="width:48px">Qtd</th><th style="width:90px">Obs</th></tr></thead><tbody>';
+  grupos.forEach(function(g,gi){
+    html+='<tr class="stop"><td></td><td class="loc">'+escHtml(g.addr)+'</td><td colspan="3">Parada '+(gi+1)+'/'+grupos.length+' - '+ecoNivelLabel(g.loc.niv)+' - '+g.itens.length+' itens</td><td>'+g.qtd+' un</td></tr>';
+    g.itens.forEach(function(it){
+      var extra=(it.locs||[]).filter(function(l){return l.addr!==g.addr;}).map(function(l){return l.addr;}).join(', ');
+      html+='<tr><td class="chk">□</td><td class="loc">'+escHtml(g.addr)+'</td><td class="sku">'+escHtml(it.sku)+'</td><td><div class="prod">'+escHtml(it.desc||it.sku)+'</div><div class="sub">'+escHtml(it.match||'')+'</div></td><td class="qtd">'+Number(it.qtd||0)+'</td><td class="sub">'+(extra?'Outros: '+escHtml(extra):'')+'</td></tr>';
+    });
+  });
+  html+='</tbody></table></body></html>';
+  var w=window.open('', '_blank');
+  if(!w){toast('Popup bloqueado. Permita popups para imprimir.',false);return;}
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
+  w.focus();
+  setTimeout(function(){w.print();},400);
 }
 
 function ecoExportCsv(){
