@@ -7,6 +7,8 @@ Roda via GitHub Actions de hora em hora
 import os
 import json
 import time
+import datetime
+import unicodedata
 import requests
 import firebase_admin
 from firebase_admin import credentials, db
@@ -15,10 +17,36 @@ from firebase_admin import credentials, db
 TINY_TOKEN = os.environ.get('TINY_TOKEN', '')
 FIREBASE_CRED_JSON = os.environ.get('FIREBASE_CREDENTIALS', '')
 FIREBASE_DB_URL = 'https://higienita-f2b22-default-rtdb.firebaseio.com'
+SYNC_MODE = os.environ.get('SYNC_MODE', 'full').lower()
+TINY_PEDIDOS_DIAS = int(os.environ.get('TINY_PEDIDOS_DIAS', '30') or 30)
+TINY_PEDIDOS_MAX_PAGINAS = int(os.environ.get('TINY_PEDIDOS_MAX_PAGINAS', '20') or 20)
 
 # Delay entre chamadas da API Tiny (segundos)
 # Tiny permite ~30 req/min, entao 2s entre chamadas = safe
 DELAY_ENTRE_CHAMADAS = 2.5
+PEDIDO_SITUACOES = [
+    'aberto',
+    'aprovado',
+    'preparando envio',
+    'faturado',
+    'pronto envio',
+    'enviado',
+    'entregue',
+    'nao entregue',
+    'cancelado',
+]
+
+STATUS_WMS = {
+    'aberto': 'pendente',
+    'aprovado': 'aprovado',
+    'preparando_envio': 'em_separacao',
+    'faturado': 'concluido',
+    'pronto_envio': 'pronto',
+    'enviado': 'enviado',
+    'entregue': 'entregue',
+    'nao_entregue': 'nao_entregue',
+    'cancelado': 'cancelado',
+}
 
 def first_text(*vals):
     for val in vals:
@@ -28,6 +56,36 @@ def first_text(*vals):
         if txt:
             return txt
     return ''
+
+def to_float(val):
+    if val in (None, ''):
+        return 0
+    try:
+        if isinstance(val, str):
+            val = val.replace('.', '').replace(',', '.') if ',' in val else val
+        return float(val or 0)
+    except Exception:
+        return 0
+
+def sanitize_str(val, limit=None):
+    if not isinstance(val, str):
+        val = '' if val is None else str(val)
+    txt = ''.join(ch for ch in val if ch in ['\n', '\t'] or ord(ch) >= 32).strip()
+    return txt[:limit] if limit else txt
+
+def normalizar_texto(txt):
+    txt = sanitize_str(txt).lower()
+    txt = unicodedata.normalize('NFKD', txt).encode('ascii', 'ignore').decode('ascii')
+    return txt
+
+def normalizar_situacao(situacao):
+    txt = normalizar_texto(situacao).replace('-', '_').replace(' ', '_')
+    while '__' in txt:
+        txt = txt.replace('__', '_')
+    return txt.strip('_')
+
+def status_wms(situacao):
+    return STATUS_WMS.get(normalizar_situacao(situacao), 'pendente')
 
 def detectar_tipo_produto(prod):
     raw = first_text(prod.get('tipo_estoque'), prod.get('tipo_produto'), prod.get('tipo'), prod.get('classe_produto'), prod.get('classe'))
@@ -173,99 +231,294 @@ def buscar_estoque(produto_id):
         'saldo':      round(total_saldo, 2)
     }
 
-def buscar_pedidos_abertos():
-    """Busca pedidos em aberto com itens de cada pedido"""
-    pedidos = []
-    pagina = 1
-    while pagina <= 5:
-        print(f'Buscando pedidos - pagina {pagina}...')
-        data = tiny_get('pedidos.pesquisa.php', {
-            'situacao': 'aberto',
-            'pagina': pagina
-        })
-        time.sleep(DELAY_ENTRE_CHAMADAS)
-        if not data:
-            break
-        items = data.get('pedidos', [])
-        if not items:
-            break
-        for item in items:
-            p = item.get('pedido', {})
-            pedidos.append({
-                'numero':   str(p.get('numero', '')),
-                'situacao': p.get('situacao', ''),
-                'cliente':  p.get('nome_contato', ''),
-                'valor':    float(p.get('valor', 0) or 0),
-                'data':     p.get('data_pedido', ''),
-                'id':       str(p.get('id', '')),
+def extrair_lista_marcadores(pedido_det):
+    marcadores = pedido_det.get('marcadores', [])
+    tags = []
+    if isinstance(marcadores, list):
+        for m in marcadores:
+            if isinstance(m, dict):
+                md = m.get('marcador', m)
+                tags.append(first_text(md.get('descricao'), md.get('nome'), md.get('marcador')))
+            else:
+                tags.append(str(m))
+    return [sanitize_str(t, 80) for t in tags if sanitize_str(t)]
+
+def extrair_textos_pedido(pedido_det):
+    campos = []
+    for chave in ['obs', 'observacoes', 'forma_envio', 'forma_frete', 'transportador', 'nome_transportador']:
+        campos.append(first_text(pedido_det.get(chave)))
+    for chave in ['ecommerce', 'transportador', 'forma_envio']:
+        valor = pedido_det.get(chave)
+        if isinstance(valor, dict):
+            campos.extend([first_text(v) for v in valor.values() if not isinstance(v, (dict, list))])
+    campos.extend(extrair_lista_marcadores(pedido_det))
+    return ' '.join([c for c in campos if c])
+
+def detectar_plataforma(canal):
+    c = normalizar_texto(canal)
+    if not c:
+        return 'outros'
+    if 'mercado' in c or 'mercadolivre' in c or 'meli' in c or c.startswith('ml') or 'mhlg' in c:
+        return 'Mercado Livre'
+    if 'shopee' in c:
+        return 'Shopee'
+    if 'magalu' in c or 'magazine' in c or 'luiza' in c:
+        return 'Magalu'
+    if 'amazon' in c or 'fba' in c:
+        return 'Amazon'
+    if 'tiktok' in c or 'tik tok' in c:
+        return 'TikTok'
+    if 'americanas' in c or 'b2w' in c:
+        return 'Americanas'
+    if 'olist' in c:
+        return 'Olist'
+    if 'tray' in c:
+        return 'Tray'
+    if 'leroy' in c:
+        return 'Leroy Merlin'
+    if 'jodda' in c:
+        return 'Jodda'
+    if 'condominio' in c or 'condom' in c or 'b2b' in c or 'atacado' in c:
+        return 'Condominio'
+    return sanitize_str(canal, 40) or 'outros'
+
+def extrair_canal(pedido_det):
+    ecommerce = pedido_det.get('ecommerce', {})
+    candidatos = []
+    if isinstance(ecommerce, dict):
+        candidatos.extend([
+            ecommerce.get('canal'), ecommerce.get('nome_loja'), ecommerce.get('nome'),
+            ecommerce.get('plataforma'), ecommerce.get('marketplace'), ecommerce.get('loja'),
+            ecommerce.get('numeroPedidoEcommerce'), ecommerce.get('numero_pedido_ecommerce'),
+        ])
+    candidatos.extend(extrair_lista_marcadores(pedido_det))
+    candidatos.append(extrair_textos_pedido(pedido_det))
+    texto = ' '.join([first_text(c) for c in candidatos if first_text(c)])
+    plataforma = detectar_plataforma(texto)
+    if plataforma != 'outros':
+        return plataforma
+    return first_text(*candidatos)[:40] or 'outros'
+
+def extrair_rastreio(pedido_det):
+    chaves = ['codigo_rastreamento', 'codigo_rastreio', 'rastreamento', 'tracking', 'tracking_code', 'numero_objeto']
+    for chave in chaves:
+        valor = first_text(pedido_det.get(chave))
+        if valor:
+            return sanitize_str(valor, 80)
+    for raiz in ['ecommerce', 'transportador', 'forma_envio']:
+        obj = pedido_det.get(raiz)
+        if isinstance(obj, dict):
+            for chave in chaves:
+                valor = first_text(obj.get(chave))
+                if valor:
+                    return sanitize_str(valor, 80)
+    return ''
+
+def limpar_item_pedido(item_d):
+    sku = sanitize_str(first_text(item_d.get('codigo'), item_d.get('sku')), 80)
+    desc = sanitize_str(first_text(item_d.get('descricao'), item_d.get('desc'), item_d.get('nome'), item_d.get('produto'), sku), 140)
+    return {
+        'sku': sku,
+        'codigo': sku,
+        'desc': desc,
+        'nome': desc,
+        'qtd': to_float(first_text(item_d.get('quantidade'), item_d.get('qtd'), 0)),
+        'un': sanitize_str(item_d.get('unidade', 'UN'), 12) or 'UN',
+        'valor': to_float(first_text(item_d.get('valor_unitario'), item_d.get('valor'), 0)),
+    }
+
+def buscar_pedidos_atualizados():
+    """Busca pedidos recentes em varias situacoes e enriquece com detalhe do Tiny."""
+    pedidos_por_id = {}
+    data_final = datetime.datetime.now()
+    data_inicial = data_final - datetime.timedelta(days=TINY_PEDIDOS_DIAS)
+    periodo = {
+        'dataInicial': data_inicial.strftime('%d/%m/%Y'),
+        'dataFinal': data_final.strftime('%d/%m/%Y'),
+    }
+
+    for situacao in PEDIDO_SITUACOES:
+        pagina = 1
+        while pagina <= TINY_PEDIDOS_MAX_PAGINAS:
+            print(f'Buscando pedidos {situacao} - pagina {pagina}...')
+            data = tiny_get('pedidos.pesquisa.php', {
+                'situacao': situacao,
+                'pagina': pagina,
+                **periodo,
             })
-        num_paginas = int(data.get('numero_paginas', 1))
-        if pagina >= num_paginas:
-            break
-        pagina += 1
+            time.sleep(DELAY_ENTRE_CHAMADAS)
+            if not data:
+                break
+            items = data.get('pedidos', [])
+            if not items:
+                break
+            for item in items:
+                p = item.get('pedido', {})
+                pedido_id = str(p.get('id', '') or p.get('numero', ''))
+                if not pedido_id:
+                    continue
+                pedidos_por_id[pedido_id] = {
+                    'numero': str(p.get('numero', '')),
+                    'situacao': p.get('situacao', situacao),
+                    'cliente': p.get('nome_contato', ''),
+                    'valor': to_float(p.get('valor', 0)),
+                    'data': p.get('data_pedido', ''),
+                    'id': str(p.get('id', '')),
+                }
+            num_paginas = int(data.get('numero_paginas', 1) or 1)
+            if pagina >= num_paginas:
+                break
+            pagina += 1
 
+    pedidos = list(pedidos_por_id.values())
     print(f'Total pedidos encontrados: {len(pedidos)}')
+    print('Buscando detalhes dos pedidos...')
 
-    # Busca itens de cada pedido (com delay para nao estourar rate limit)
-    print('Buscando itens dos pedidos...')
     pedidos_com_itens = []
     for i, ped in enumerate(pedidos):
-        if not ped['id']:
-            pedidos_com_itens.append(ped)
-            continue
-        detail = tiny_get('pedido.obter.php', {'id': ped['id']})
-        time.sleep(DELAY_ENTRE_CHAMADAS)
-        if detail:
-            pedido_det = detail.get('pedido', {})
-            itens_raw = pedido_det.get('itens', [])
-            itens = []
-            for it in itens_raw:
-                item_d = it.get('item', {})
-                itens.append({
-                    'sku':    str(item_d.get('codigo', '')),
-                    'desc':   str(item_d.get('descricao', ''))[:60],
-                    'qtd':    float(item_d.get('quantidade', 0) or 0),
-                    'un':     str(item_d.get('unidade', 'UN')),
-                    'valor':  float(item_d.get('valor_unitario', 0) or 0),
-                })
-            ped['itens'] = itens
-            
-            # Capture canal/plataforma from tags or ecommerce field
-            canal = ''
-            # Try ecommerce field first
-            ecommerce = pedido_det.get('ecommerce', {})
-            if ecommerce:
-                canal = str(ecommerce.get('canal', '') or ecommerce.get('nome_loja', '') or '')
-            
-            # Try tags/marcadores
-            if not canal:
-                marcadores = pedido_det.get('marcadores', [])
-                if isinstance(marcadores, list) and marcadores:
-                    tags = [str(m.get('marcador', {}).get('descricao', '') if isinstance(m, dict) else m) for m in marcadores]
-                    canal = ', '.join([t for t in tags if t])
-            
-            # Try forma_envio or obs for channel hints
-            if not canal:
-                obs = str(pedido_det.get('obs', '') or '')
-                for plat in ['mercado livre', 'mercadolivre', 'shopee', 'magazine', 'magalu', 'amazon', 'tiktok', 'b2w', 'americanas']:
-                    if plat in obs.lower():
-                        canal = plat.title()
-                        break
-            
-            if canal:
-                ped['canal'] = canal.encode('ascii', 'ignore').decode('ascii').strip()[:40]
-        else:
-            ped['itens'] = []
+        pedido_det = {}
+        if ped.get('id'):
+            detail = tiny_get('pedido.obter.php', {'id': ped['id']})
+            time.sleep(DELAY_ENTRE_CHAMADAS)
+            if detail:
+                pedido_det = detail.get('pedido', {})
+
+        cliente = pedido_det.get('cliente', {})
+        ecommerce = pedido_det.get('ecommerce', {})
+        if not isinstance(cliente, dict):
+            cliente = {}
+        if not isinstance(ecommerce, dict):
+            ecommerce = {}
+
+        itens = []
+        for it in pedido_det.get('itens', []) or []:
+            item_d = it.get('item', {}) if isinstance(it, dict) else {}
+            itens.append(limpar_item_pedido(item_d))
+
+        canal = extrair_canal(pedido_det) if pedido_det else first_text(ped.get('canal'), 'outros')
+        marcadores = extrair_lista_marcadores(pedido_det) if pedido_det else []
+        ped.update({
+            'numero': first_text(pedido_det.get('numero'), ped.get('numero')),
+            'numero_ecommerce': first_text(
+                ecommerce.get('numeroPedidoEcommerce'),
+                ecommerce.get('numero_pedido_ecommerce'),
+                pedido_det.get('numero_ecommerce'),
+                pedido_det.get('numero_pedido_ecommerce'),
+            ),
+            'situacao': first_text(pedido_det.get('situacao'), ped.get('situacao')),
+            'cliente': first_text(cliente.get('nome'), pedido_det.get('nome_contato'), ped.get('cliente')),
+            'documento': first_text(cliente.get('cpf_cnpj'), cliente.get('cnpj'), cliente.get('cpf'), pedido_det.get('cpf_cnpj')),
+            'valor': to_float(first_text(pedido_det.get('valor'), pedido_det.get('valor_total'), ped.get('valor'))),
+            'data': first_text(pedido_det.get('data_pedido'), ped.get('data')),
+            'data_prevista': first_text(pedido_det.get('data_prevista'), pedido_det.get('data_entrega')),
+            'data_limite': first_text(pedido_det.get('data_limite'), pedido_det.get('data_limite_despacho'), pedido_det.get('data_prevista')),
+            'canal': canal,
+            'plataforma': detectar_plataforma(canal),
+            'loja': first_text(ecommerce.get('nome_loja'), ecommerce.get('loja'), ecommerce.get('nome')),
+            'forma_envio': first_text(pedido_det.get('forma_envio'), pedido_det.get('forma_frete')),
+            'transportador': first_text(pedido_det.get('transportador'), pedido_det.get('nome_transportador')),
+            'rastreio': extrair_rastreio(pedido_det),
+            'marcadores': marcadores,
+            'itens': itens,
+        })
         pedidos_com_itens.append(ped)
-        if (i+1) % 20 == 0:
-            print(f'  Itens: {i+1}/{len(pedidos)} pedidos processados...')
+        if (i + 1) % 20 == 0:
+            print(f'  Detalhes: {i+1}/{len(pedidos)} pedidos processados...')
             time.sleep(10)
 
-    print(f'Total pedidos com itens: {len(pedidos_com_itens)}')
+    print(f'Total pedidos com detalhes: {len(pedidos_com_itens)}')
     return pedidos_com_itens
 
+def buscar_pedidos_abertos():
+    return buscar_pedidos_atualizados()
+
+def sanitize_key(key):
+    if not key:
+        return 'SEM_KEY'
+    key = str(key)
+    for char in ['.', '#', '$', '[', ']', '/', ' ', '@', '!', '%', '&', '*', '+', '=', '?', '<', '>', ',', ';', ':', "'", '"']:
+        key = key.replace(char, '_')
+    return key.strip('_') or 'SEM_KEY'
+
+def salvar_pedidos_firebase(ref, pedidos, agora):
+    pedidos_dict = {str(i): p for i, p in enumerate(pedidos)}
+    ref.child('pedidos_abertos').set({
+        'items': pedidos_dict,
+        'total': len(pedidos),
+        'atualizado': agora
+    })
+
+    existentes = ref.child('pedidos').get() or {}
+    pedidos_wms = {}
+    agora_ms = int(datetime.datetime.now().timestamp() * 1000)
+
+    for p in pedidos:
+        numero_original = first_text(p.get('numero'), p.get('id'), 'SEM_NUM')
+        num = sanitize_key(numero_original)
+        existente = existentes.get(num, {}) if isinstance(existentes, dict) else {}
+        itens_clean = [limpar_item_pedido(it) for it in (p.get('itens') or [])]
+        situacao = sanitize_str(p.get('situacao', ''))
+        status_erp = status_wms(situacao)
+        status_final = status_erp
+        if existente.get('status') == 'em_separacao' and status_erp in ['pendente', 'aprovado']:
+            status_final = 'em_separacao'
+
+        canal = sanitize_str(p.get('canal') or p.get('plataforma') or 'outros', 80)
+        plataforma = detectar_plataforma(canal)
+        integracoes = []
+        for valor in [plataforma, canal, p.get('loja')]:
+            valor = sanitize_str(valor, 80)
+            if valor and valor not in integracoes and valor != 'outros':
+                integracoes.append(valor)
+
+        pedidos_wms[num] = {
+            'numero': sanitize_str(numero_original, 40),
+            'id_tiny': sanitize_str(p.get('id', ''), 40),
+            'numero_ecommerce': sanitize_str(p.get('numero_ecommerce', ''), 80),
+            'cliente': sanitize_str(p.get('cliente', ''), 120),
+            'documento': sanitize_str(p.get('documento', ''), 40),
+            'valor': to_float(p.get('valor', 0)),
+            'data': sanitize_str(p.get('data', ''), 20),
+            'data_prevista': sanitize_str(p.get('data_prevista', ''), 20),
+            'data_limite': sanitize_str(p.get('data_limite', ''), 20),
+            'status': status_final,
+            'status_erp': status_erp,
+            'situacao_tiny': situacao,
+            'origem': 'tiny',
+            'canal': canal,
+            'plataforma': plataforma,
+            'loja': sanitize_str(p.get('loja', ''), 80),
+            'forma_envio': sanitize_str(p.get('forma_envio', ''), 80),
+            'transportador': sanitize_str(p.get('transportador', ''), 80),
+            'rastreio': sanitize_str(p.get('rastreio', ''), 80),
+            'codigo_rastreio': sanitize_str(p.get('rastreio', ''), 80),
+            'marcadores': [sanitize_str(m, 80) for m in (p.get('marcadores') or [])],
+            'integracoes': integracoes,
+            'itens': itens_clean,
+            'bipados': existente.get('bipados', {}),
+            'separador': existente.get('separador', ''),
+            'ts_inicio': existente.get('ts_inicio', 0),
+            'ts_fim': existente.get('ts_fim', 0),
+            'ts': existente.get('ts') or agora_ms,
+            'ts_sync': agora_ms,
+        }
+
+    pedidos_items = list(pedidos_wms.items())
+    for i in range(0, len(pedidos_items), 20):
+        chunk = dict(pedidos_items[i:i+20])
+        ref.child('pedidos').update(chunk)
+        print(f'  pedidos WMS: {min(i+20, len(pedidos_items))}/{len(pedidos_items)} salvos')
+
+    ref.child('pedidos_meta').set({
+        'total': len(pedidos_wms),
+        'atualizado': agora,
+        'dias': TINY_PEDIDOS_DIAS,
+        'situacoes': PEDIDO_SITUACOES,
+        'modo': SYNC_MODE,
+    })
+    print('  pedidos salvos')
+
 def sincronizar():
-    import datetime
     print('=== Iniciando sincronizacao Tiny -> Firebase ===')
     print(f'Horario: {datetime.datetime.now().isoformat()}')
     
@@ -341,40 +594,6 @@ def sincronizar():
     agora = datetime.datetime.now().isoformat()
     ref = db.reference('/')
     
-    # Firebase nao aceita chaves com . # $ [ ] /
-    def sanitize_key(key):
-        if not key:
-            return 'SEM_SKU'
-        for char in ['.', '#', '$', '[', ']', '/', ' ', '@', '!', '%', '&', '*', '+', '=', '?', '<', '>', ',', ';', ':', "'", '"']:
-            key = key.replace(char, '_')
-        return key.strip('_') or 'SEM_SKU'
-
-    def sanitize_str(val):
-        if not isinstance(val, str):
-            return val
-        # Remove control chars and problematic Unicode
-        return val.encode('ascii', 'ignore').decode('ascii').strip()
-
-    def detectar_plataforma(canal):
-        c = sanitize_str(str(canal or '')).lower()
-        if not c:
-            return 'outros'
-        if 'mercado' in c or 'mercadolivre' in c or 'meli' in c or c.startswith('ml'):
-            return 'Mercado Livre'
-        if 'shopee' in c:
-            return 'Shopee'
-        if 'magalu' in c or 'magazine' in c or 'luiza' in c:
-            return 'Magalu'
-        if 'amazon' in c:
-            return 'Amazon'
-        if 'tiktok' in c or 'tik tok' in c:
-            return 'TikTok'
-        if 'americanas' in c or 'b2w' in c:
-            return 'Americanas'
-        if 'condominio' in c or 'condom' in c or 'b2b' in c or 'atacado' in c:
-            return 'Condominio'
-        return sanitize_str(canal) or 'outros'
-
     def sanitize_item(item):
         return {
             'sku':        sanitize_str(item.get('sku', '')),
@@ -476,58 +695,21 @@ def sincronizar():
     })
     print('  alertas salvos')
     
-    # Save to pedidos_abertos (for reference)
-    pedidos_dict = {str(i): p for i, p in enumerate(pedidos)}
-    ref.child('pedidos_abertos').set({
-        'items': pedidos_dict,
-        'total': len(pedidos),
-        'atualizado': agora
-    })
-    
-    # Also save directly to /pedidos/ with itens so WMS can use without manual import
-    def sanitize_key(k):
-        return str(k).replace('.','_').replace('#','_').replace('$','_').replace('[','_').replace(']','_').replace('/','_') or 'SEM_KEY'
-    
-    pedidos_wms = {}
-    for p in pedidos:
-        num = sanitize_key(p.get('numero','') or p.get('id','') or 'SEM_NUM')
-        # Sanitize item descriptions
-        itens_clean = []
-        for it in (p.get('itens') or []):
-            itens_clean.append({
-                'sku':   str(it.get('sku','')).encode('ascii','ignore').decode('ascii'),
-                'desc':  str(it.get('desc','')).encode('ascii','ignore').decode('ascii')[:55],
-                'qtd':   float(it.get('qtd',0) or 0),
-                'un':    str(it.get('un','UN')).encode('ascii','ignore').decode('ascii'),
-                'valor': float(it.get('valor',0) or 0),
-            })
-        canal_raw = str(p.get('canal','') or p.get('ecommerce','') or '')
-        pedidos_wms[num] = {
-            'numero':  num,
-            'id_tiny': str(p.get('id','') or ''),
-            'cliente': str(p.get('cliente','') or p.get('nome_contato','')).encode('ascii','ignore').decode('ascii')[:60],
-            'valor':   float(p.get('valor',0) or 0),
-            'data':    str(p.get('data','') or p.get('data_pedido','')),
-            'status':  'pendente',
-            'origem':  'tiny',
-            'canal':   canal_raw.encode('ascii','ignore').decode('ascii').strip()[:40],
-            'plataforma': detectar_plataforma(canal_raw),
-            'itens':   itens_clean,
-            'ts':      int(datetime.datetime.now().timestamp() * 1000),
-        }
-    
-    # Save in chunks to avoid size limits
-    pedidos_items = list(pedidos_wms.items())
-    for i in range(0, len(pedidos_items), 20):
-        chunk = dict(pedidos_items[i:i+20])
-        ref.child('pedidos').update(chunk)
-        print(f'  pedidos WMS: {min(i+20, len(pedidos_items))}/{len(pedidos_items)} salvos')
-    
-    print('  pedidos salvos')
+    salvar_pedidos_firebase(ref, pedidos, agora)
     
     ref.child('ultima_sincronizacao').set(agora)
     
     print(f'\n=== Sync concluido: {len(catalogo)} produtos, {len(alertas)} alertas, {len(pedidos)} pedidos ===')
+
+def sincronizar_pedidos():
+    print('=== Iniciando sincronizacao de pedidos Tiny -> Firebase ===')
+    print(f'Horario: {datetime.datetime.now().isoformat()}')
+    pedidos = buscar_pedidos_atualizados()
+    agora = datetime.datetime.now().isoformat()
+    ref = db.reference('/')
+    salvar_pedidos_firebase(ref, pedidos, agora)
+    ref.child('ultima_sincronizacao_pedidos').set(agora)
+    print(f'\n=== Sync pedidos concluido: {len(pedidos)} pedidos ===')
 
 if __name__ == '__main__':
     if not TINY_TOKEN:
@@ -537,4 +719,7 @@ if __name__ == '__main__':
         print('ERRO: FIREBASE_CREDENTIALS nao configurado')
         exit(1)
     init_firebase()
-    sincronizar()
+    if SYNC_MODE == 'pedidos':
+        sincronizar_pedidos()
+    else:
+        sincronizar()
