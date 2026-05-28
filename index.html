@@ -956,34 +956,38 @@ function armazem02ToFirebaseData(){
   return data;
 }
 
-function zerarProdutosData(data){
-  var out={};
-  Object.keys(data||{}).forEach(function(a){
-    var prods=(data[a]&&data[a].produtos)||[];
-    out[a]={produtos:prods.map(function(p){
-      var item=Object.assign({},p);
-      item.qty=0;
-      if(item.q!==undefined)item.q=0;
-      if(item.quantidade!==undefined)item.quantidade=0;
-      return item;
-    })};
+function qtyItemNaoZero(p){
+  return Number(p&&((p.qty!==undefined?p.qty:(p.q!==undefined?p.q:p.quantidade))||0))!==0;
+}
+
+function produtosZerados(prods){
+  return (prods||[]).map(function(p){
+    var item=Object.assign({},p);
+    item.qty=0;
+    if(item.q!==undefined)item.q=0;
+    if(item.quantidade!==undefined)item.quantidade=0;
+    return item;
   });
-  return out;
 }
 
 function zerarQuantidadesWmsFirebase(saved,motivo){
   if(!rtdb)return Promise.resolve();
   var base=saved&&Object.keys(saved).length?saved:armazem02ToFirebaseData();
-  var data=zerarProdutosData(base);
+  var updates={};
+  var alterados=0;
+  Object.keys(base||{}).forEach(function(a){
+    var prods=(base[a]&&base[a].produtos)||[];
+    if(prods.some(qtyItemNaoZero)){
+      updates['paletes/'+a+'/produtos']=produtosZerados(prods);
+      alterados++;
+    }
+  });
+  updates['meta/wms_zero_qty_version']=WMS_ZERO_QTY_VERSION;
+  updates['meta/wms_zero_qty_ts']=Date.now();
+  updates['meta/wms_zero_qty_motivo']=motivo||'manual';
   setStatus('Zerando quantidades do WMS e mantendo localizacoes...','var(--amber)',false);
-  return rtdb.ref('paletes').set(data).then(function(){
-    return rtdb.ref('meta').update({
-      wms_zero_qty_version:WMS_ZERO_QTY_VERSION,
-      wms_zero_qty_ts:Date.now(),
-      wms_zero_qty_motivo:motivo||'manual'
-    });
-  }).then(function(){
-    toast('Quantidades do WMS zeradas; localizacoes mantidas.',true);
+  return rtdb.ref('/').update(updates).then(function(){
+    toast(alterados?('Quantidades zeradas em '+alterados+' posicoes; localizacoes mantidas.'):'Quantidades ja estavam zeradas.',true);
   }).catch(function(e){
     toast('Erro ao zerar WMS: '+e.message,false);
   });
