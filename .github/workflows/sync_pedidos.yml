@@ -1,11 +1,35 @@
-name: Sincronizar pedidos Tiny em tempo quase real (desligado)
+name: Sincronizar pedidos Tiny em tempo quase real (somente leitura)
 
 on:
+  schedule:
+    - cron: '*/15 * * * *'
   workflow_dispatch:
 
 jobs:
-  disabled:
+  sync-pedidos-readonly:
     runs-on: ubuntu-latest
     steps:
-      - name: Integracao desligada
-        run: echo "Integracao de pedidos Tiny desligada. Este workflow nao chama a API do Tiny."
+      - name: Checkout repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Instalar dependencias
+        run: pip install requests firebase-admin
+
+      - name: Sincronizar pedidos somente leitura
+        env:
+          TINY_TOKEN: ${{ secrets.TINY_TOKEN }}
+          FIREBASE_CREDENTIALS: ${{ secrets.FIREBASE_CREDENTIALS }}
+          ENABLE_TINY_READONLY: "true"
+          SYNC_MODE: pedidos
+          TINY_PEDIDOS_DIAS: "30"
+          TINY_PEDIDOS_MAX_PAGINAS: "20"
+        run: python sync_tiny.py
+
+      - name: Log resultado
+        if: always()
+        run: echo "Sincronizacao de pedidos Tiny somente leitura finalizada em $(date)"

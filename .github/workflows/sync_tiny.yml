@@ -1,11 +1,32 @@
-name: Sincronizar Tiny ERP com Firebase (desligado)
+name: Sincronizar Tiny ERP com Firebase (somente leitura)
 
 on:
+  schedule:
+    - cron: '0 * * * *'
   workflow_dispatch:
 
 jobs:
-  disabled:
+  sync-readonly:
     runs-on: ubuntu-latest
     steps:
-      - name: Integracao desligada
-        run: echo "Integracao Tiny desligada. Este workflow nao chama a API do Tiny."
+      - name: Checkout repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Instalar dependencias
+        run: pip install requests firebase-admin
+
+      - name: Sincronizar somente leitura
+        env:
+          TINY_TOKEN: ${{ secrets.TINY_TOKEN }}
+          FIREBASE_CREDENTIALS: ${{ secrets.FIREBASE_CREDENTIALS }}
+          ENABLE_TINY_READONLY: "true"
+        run: python sync_tiny.py
+
+      - name: Log resultado
+        if: always()
+        run: echo "Sincronizacao Tiny somente leitura finalizada em $(date)"

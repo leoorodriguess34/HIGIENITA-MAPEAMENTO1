@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Higienita WMS - Sincronizacao Tiny ERP -> Firebase
-Roda via GitHub Actions de hora em hora
+Modo somente leitura: consulta Tiny e grava apenas no Firebase/WMS.
 """
 
 import os
@@ -15,12 +15,12 @@ TINY_TOKEN = os.environ.get('TINY_TOKEN', '')
 FIREBASE_CRED_JSON = os.environ.get('FIREBASE_CREDENTIALS', '')
 FIREBASE_DB_URL = 'https://higienita-f2b22-default-rtdb.firebaseio.com'
 SYNC_MODE = os.environ.get('SYNC_MODE', 'full').lower()
-ENABLE_TINY_INTEGRATION = os.environ.get('ENABLE_TINY_INTEGRATION', '').lower() == 'true'
+ENABLE_TINY_READONLY = os.environ.get('ENABLE_TINY_READONLY', '').lower() == 'true'
 TINY_PEDIDOS_DIAS = int(os.environ.get('TINY_PEDIDOS_DIAS', '30') or 30)
 TINY_PEDIDOS_MAX_PAGINAS = int(os.environ.get('TINY_PEDIDOS_MAX_PAGINAS', '20') or 20)
 
-if __name__ == '__main__' and not ENABLE_TINY_INTEGRATION:
-    print('Integracao Tiny desligada. Nenhuma chamada ao Tiny ou Firebase sera executada.')
+if __name__ == '__main__' and not ENABLE_TINY_READONLY:
+    print('Integracao Tiny somente leitura desligada. Nenhuma chamada ao Tiny ou Firebase sera executada.')
     exit(0)
 
 import requests
@@ -120,9 +120,18 @@ def init_firebase():
     print('Firebase conectado')
 
 TINY_BASE = 'https://api.tiny.com.br/api2'
+TINY_READONLY_ENDPOINTS = {
+    'produtos.pesquisa.php',
+    'produto.obter.estoque.php',
+    'pedidos.pesquisa.php',
+    'pedido.obter.php',
+}
 
-def tiny_get(endpoint, params={}, tentativas=3):
-    """Chamada a API Tiny com retry em caso de rate limit"""
+def tiny_get(endpoint, params=None, tentativas=3):
+    """Chamada somente leitura a API Tiny com retry em caso de rate limit"""
+    if endpoint not in TINY_READONLY_ENDPOINTS:
+        raise RuntimeError(f'Endpoint Tiny bloqueado no modo somente leitura: {endpoint}')
+    params = dict(params or {})
     params['token'] = TINY_TOKEN
     params['formato'] = 'json'
     
