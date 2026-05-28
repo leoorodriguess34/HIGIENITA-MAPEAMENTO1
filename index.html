@@ -914,6 +914,8 @@ var EAN_MAP = {"0074468008328":{"s":"ALVSCLR1KG","d":"AEVO ALVEJANTE SEM CLORO 1
 
 
 var P = {}, sel = null, mP = [], sepView = 'todos', sepPlat = '', catalogoTiny = {}, aplicandoArmazem02 = false;
+var WMS_ZERO_QTY_VERSION = '2026-05-28-zero-wms-qty-v1';
+var wmsZeroQtyCheckDone = false;
 
 function adr(c,col,n){ return c+String((col-1)*3+n).padStart(2,'00').slice(-2); }
 function corredorOrdem(c){ var i='ABCDEM'.indexOf(String(c||'').toUpperCase()); return i>=0?i:99; }
@@ -952,6 +954,39 @@ function armazem02ToFirebaseData(){
     }
   });
   return data;
+}
+
+function zerarProdutosData(data){
+  var out={};
+  Object.keys(data||{}).forEach(function(a){
+    var prods=(data[a]&&data[a].produtos)||[];
+    out[a]={produtos:prods.map(function(p){
+      var item=Object.assign({},p);
+      item.qty=0;
+      if(item.q!==undefined)item.q=0;
+      if(item.quantidade!==undefined)item.quantidade=0;
+      return item;
+    })};
+  });
+  return out;
+}
+
+function zerarQuantidadesWmsFirebase(saved,motivo){
+  if(!rtdb)return Promise.resolve();
+  var base=saved&&Object.keys(saved).length?saved:armazem02ToFirebaseData();
+  var data=zerarProdutosData(base);
+  setStatus('Zerando quantidades do WMS e mantendo localizacoes...','var(--amber)',false);
+  return rtdb.ref('paletes').set(data).then(function(){
+    return rtdb.ref('meta').update({
+      wms_zero_qty_version:WMS_ZERO_QTY_VERSION,
+      wms_zero_qty_ts:Date.now(),
+      wms_zero_qty_motivo:motivo||'manual'
+    });
+  }).then(function(){
+    toast('Quantidades do WMS zeradas; localizacoes mantidas.',true);
+  }).catch(function(e){
+    toast('Erro ao zerar WMS: '+e.message,false);
+  });
 }
 
 function mapaSalvoQuebrado(saved){
@@ -1385,6 +1420,25 @@ function load(){
     initP();
     injectTiny();
     var saved = snapshot.val();
+    if(!wmsZeroQtyCheckDone){
+      wmsZeroQtyCheckDone=true;
+      rtdb.ref('meta/wms_zero_qty_version').once('value', function(metaSnap){
+        if(metaSnap.val()!==WMS_ZERO_QTY_VERSION){
+          zerarQuantidadesWmsFirebase(saved,'auto_zerar_quantidades_wms_2026_05_28');
+          return;
+        }
+        aplicarPaletesSalvos(saved);
+      });
+      return;
+    }
+    aplicarPaletesSalvos(saved);
+  }, function(err){
+    setStatus('Erro: '+err.code,'var(--red)',false);
+    renderAll();
+  });
+}
+
+function aplicarPaletesSalvos(saved){
     if(saved){
       Object.keys(saved).forEach(function(a){
         if(P[a] && saved[a].produtos !== undefined){
@@ -1399,10 +1453,6 @@ function load(){
     var n=Object.values(P).filter(function(p){return p.produtos.length>0;}).length;
     setStatus('Online - '+n+' paletes ocupados','var(--accent)',true);
     renderAll();
-  }, function(err){
-    setStatus('Erro: '+err.code,'var(--red)',false);
-    renderAll();
-  });
 }
 
 function salvarFirebase(addr){
